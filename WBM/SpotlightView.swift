@@ -149,17 +149,30 @@ struct SpotlightView: View {
         isLoading = true
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
 
-        Firestore.firestore().collection("users").document(currentUserID).getDocument { document, error in
+        let currentUserRef = Firestore.firestore().collection("users").document(currentUserID)
+
+        // Fetch excluded users (likes, matches, swiped)
+        currentUserRef.getDocument { document, error in
             if let error = error {
                 print("Error fetching user data: \(error.localizedDescription)")
+                isLoading = false
                 return
             }
 
-            let likedUsers = document?.data()?["likes"] as? [String] ?? []
+            guard let data = document?.data() else {
+                isLoading = false
+                return
+            }
 
+            let swipedUsers = data["swipedUsers"] as? [String] ?? []
+            let likedUsers = data["likes"] as? [String] ?? []
+            let matchedUsers = data["matches"] as? [String] ?? []
+            let excludedUserIDs = Set(swipedUsers + likedUsers + matchedUsers)
+
+            // Fetch spotlighted users, excluding the current user's excluded IDs
             fetchSpotlightedUsers { userIds in
-                let filteredUserIds = userIds.filter { !likedUsers.contains($0) }
-                
+                let filteredUserIds = userIds.filter { !excludedUserIDs.contains($0) }
+
                 guard !filteredUserIds.isEmpty else {
                     DispatchQueue.main.async {
                         self.spotlightedUsers = []
@@ -184,13 +197,15 @@ struct SpotlightView: View {
                 }
             }
 
-            if let count = document?.data()?["spotlightsRemaining"] as? Int {
+            // Fetch spotlights remaining
+            if let count = data["spotlightsRemaining"] as? Int {
                 DispatchQueue.main.async {
                     self.spotlightsRemaining = count
                 }
             }
         }
     }
+
 
 
     private func skipUser(user: User) {

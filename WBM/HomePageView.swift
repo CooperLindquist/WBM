@@ -5,9 +5,9 @@ import FirebaseAuth
 
 struct HomePageView: View {
     @State private var users: [User] = []
-    @State private var swipedUsers: Set<String> = []
+    @State private var excludedUsers: Set<String> = []
     @State private var isLoading = true
-    
+
     var body: some View {
         ZStack {
             LinearGradient(
@@ -16,7 +16,7 @@ struct HomePageView: View {
                 endPoint: .bottom
             )
             .edgesIgnoringSafeArea(.all)
-            
+
             if isLoading {
                 ProgressView("Loading Users...")
                     .progressViewStyle(CircularProgressViewStyle())
@@ -34,67 +34,69 @@ struct HomePageView: View {
                         )
                     }
                 }
-
             }
         }
-        .onAppear(perform: loadSwipedUsersAndFetchUsers)
+        .onAppear(perform: loadExcludedUsersAndFetchUsers)
     }
-    
-    private func loadSwipedUsersAndFetchUsers() {
+
+    private func loadExcludedUsersAndFetchUsers() {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
         isLoading = true
-        
+
         let userDoc = Firestore.firestore().collection("users").document(currentUserID)
-        
-        // Fetch swiped users
+
+        // Fetch excluded users (swiped, liked, matched)
         userDoc.getDocument { document, error in
             if let error = error {
-                print("Error fetching swiped users: \(error.localizedDescription)")
+                print("Error fetching excluded users: \(error.localizedDescription)")
                 isLoading = false
                 return
             }
-            
-            if let data = document?.data(), let swiped = data["swipedUsers"] as? [String] {
-                self.swipedUsers = Set(swiped)
+
+            if let data = document?.data() {
+                let swiped = data["swipedUsers"] as? [String] ?? []
+                let liked = data["likes"] as? [String] ?? []
+                let matched = data["matches"] as? [String] ?? []
+                self.excludedUsers = Set(swiped + liked + matched)
             }
-            
-            // Fetch users after loading swiped users
+
+            // Fetch users after loading excluded users
             fetchUsers()
         }
     }
-    
+
     private func fetchUsers() {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
-        
+
         Firestore.firestore().collection("users").getDocuments { snapshot, error in
             if let error = error {
                 print("Error fetching users: \(error.localizedDescription)")
                 isLoading = false
                 return
             }
-            
+
             if let documents = snapshot?.documents {
                 let fetchedUsers = documents.compactMap { doc -> User? in
                     guard let data = doc.data() as? [String: Any], doc.documentID != currentUserID else { return nil }
                     return User(id: doc.documentID, data: data)
                 }
-                self.users = fetchedUsers.filter { !self.swipedUsers.contains($0.id) }
+                self.users = fetchedUsers.filter { !self.excludedUsers.contains($0.id) }
             }
             isLoading = false
         }
     }
-    
+
     private func skipUser() {
         guard !users.isEmpty else { return }
         let skippedUser = users.removeLast()
-        updateSwipedUsers(skippedUser.id)
+        updateExcludedUsers(skippedUser.id)
     }
-    
+
     private func approveUser() {
         guard !users.isEmpty else { return }
         let approvedUser = users.removeLast()
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
-        
+
         // Add the current user to the "likes" field of the approved user's document
         Firestore.firestore().collection("users").document(approvedUser.id).updateData([
             "likes": FieldValue.arrayUnion([currentUserID])
@@ -103,25 +105,23 @@ struct HomePageView: View {
                 print("Error adding like: \(error.localizedDescription)")
             }
         }
-        
-        updateSwipedUsers(approvedUser.id)
+
+        updateExcludedUsers(approvedUser.id)
     }
-    
-    private func updateSwipedUsers(_ userID: String) {
+
+    private func updateExcludedUsers(_ userID: String) {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
-        swipedUsers.insert(userID)
-        
+        excludedUsers.insert(userID)
+
         Firestore.firestore().collection("users").document(currentUserID).updateData([
             "swipedUsers": FieldValue.arrayUnion([userID])
         ]) { error in
             if let error = error {
-                print("Error updating swiped users: \(error.localizedDescription)")
+                print("Error updating excluded users: \(error.localizedDescription)")
             }
         }
     }
 }
-
-
 
 struct UserCardView: View {
     let user: User
@@ -205,13 +205,6 @@ struct UserCardView: View {
     }
 }
 
-
-
-
-
-
-
-
 struct User: Identifiable, Hashable {
     let id: String
     let name: String
@@ -223,13 +216,10 @@ struct User: Identifiable, Hashable {
     let languages: [String]?
     let imageURLs: [String]
 
-    // New property
-    var timeRemaining: TimeInterval?
-
     init?(id: String, data: [String: Any]) {
         guard let name = data["name"] as? String,
               let imageURLs = data["profileImageURLs"] as? [String], !imageURLs.isEmpty else { return nil }
-        
+
         self.id = id
         self.name = name
         self.bio = data["bio"] as? String
@@ -241,8 +231,6 @@ struct User: Identifiable, Hashable {
         self.imageURLs = imageURLs
     }
 }
-
-
 
 #Preview {
     HomePageView()
