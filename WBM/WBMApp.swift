@@ -24,7 +24,9 @@ struct WBMApp: App {
     var body: some Scene {
         WindowGroup {
             NavigationView {
-                if sessionManager.isSignedIn {
+                if sessionManager.isLoading {
+                    LoadingView()
+                } else if sessionManager.isSignedIn {
                     TabBarView()
                         .environmentObject(sessionManager)
                 } else {
@@ -33,6 +35,9 @@ struct WBMApp: App {
                 }
             }
             .navigationViewStyle(StackNavigationViewStyle())
+            .onAppear {
+                sessionManager.checkAuthState()
+            }
         }
     }
 }
