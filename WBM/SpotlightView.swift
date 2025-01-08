@@ -39,21 +39,37 @@ func allocateMonthlySpotlights() {
 }
 
 // Function to add a user to SpotlightView
-func addToSpotlight(userID: String, duration: TimeInterval = 7200) {
+func addToSpotlight(userID: String, additionalDuration: TimeInterval = 18000) {
     let spotlightRef = Firestore.firestore().collection("Spotlight").document(userID)
 
-    let expirationDate = Date().addingTimeInterval(duration)
-    spotlightRef.setData(["userID": userID, "expiresAt": expirationDate]) { error in
+    spotlightRef.getDocument { document, error in
         if let error = error {
-            print("Error adding user to Spotlight: \(error.localizedDescription)")
+            print("Error checking spotlight document: \(error.localizedDescription)")
+            return
         }
-    }
 
-    // Update the user's spotlight count
-    let userRef = Firestore.firestore().collection("users").document(userID)
-    userRef.updateData(["spotlightsRemaining": FieldValue.increment(Int64(-1))]) { error in
-        if let error = error {
-            print("Error decrementing user's spotlights: \(error.localizedDescription)")
+        let currentExpiration: Date
+        if let data = document?.data(), let expiresAt = (data["expiresAt"] as? Timestamp)?.dateValue() {
+            // Extend the existing expiration time
+            currentExpiration = max(expiresAt, Date())
+        } else {
+            // Start from the current time if not already in spotlight
+            currentExpiration = Date()
+        }
+
+        let newExpiration = currentExpiration.addingTimeInterval(additionalDuration)
+        spotlightRef.setData(["userID": userID, "expiresAt": newExpiration]) { error in
+            if let error = error {
+                print("Error adding user to Spotlight: \(error.localizedDescription)")
+            }
+        }
+
+        // Update the user's spotlight count
+        let userRef = Firestore.firestore().collection("users").document(userID)
+        userRef.updateData(["spotlightsRemaining": FieldValue.increment(Int64(-1))]) { error in
+            if let error = error {
+                print("Error decrementing user's spotlights: \(error.localizedDescription)")
+            }
         }
     }
 }
@@ -108,6 +124,19 @@ struct SpotlightView: View {
                         .padding(.top, 20)
                 }
 
+                Button(action: useSpotlight) {
+                    Text("Use Spotlight")
+                        .font(.headline)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(spotlightsRemaining > 0 ? Color.green : Color.gray)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+                .disabled(spotlightsRemaining == 0)
+
                 if isLoading {
                     ProgressView("Loading Spotlighted Users...")
                         .progressViewStyle(CircularProgressViewStyle())
@@ -142,6 +171,17 @@ struct SpotlightView: View {
                 onSkip: { skipUser(user: user) },
                 onApprove: { approveUser(user: user) }
             )
+        }
+    }
+
+    private func useSpotlight() {
+        guard let currentUserID = Auth.auth().currentUser?.uid else { return }
+
+        if spotlightsRemaining > 0 {
+            addToSpotlight(userID: currentUserID)
+            spotlightsRemaining -= 1
+        } else {
+            print("No spotlights remaining.")
         }
     }
 
@@ -206,8 +246,6 @@ struct SpotlightView: View {
         }
     }
 
-
-
     private func skipUser(user: User) {
         spotlightedUsers.removeAll { $0.id == user.id }
         selectedUser = nil
@@ -216,7 +254,6 @@ struct SpotlightView: View {
     private func approveUser(user: User) {
         spotlightedUsers.removeAll { $0.id == user.id }
 
-        // Example Firestore update for "likes":
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
         Firestore.firestore().collection("users").document(user.id).updateData([
             "likes": FieldValue.arrayUnion([currentUserID])
@@ -229,7 +266,6 @@ struct SpotlightView: View {
         selectedUser = nil
     }
 }
-
 
 
 
