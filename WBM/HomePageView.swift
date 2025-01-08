@@ -38,7 +38,7 @@ struct HomePageView: View {
         }
         .onAppear(perform: loadExcludedUsersAndFetchUsers)
     }
-
+//
     private func loadExcludedUsersAndFetchUsers() {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
         isLoading = true
