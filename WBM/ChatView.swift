@@ -14,10 +14,11 @@ struct ChatView: View {
     @State private var messages: [Message] = []
     @State private var newMessage: String = ""
     @State private var listener: ListenerRegistration? = nil
+    @State private var showingRateUserView = false
+
 
     var body: some View {
         ZStack {
-            // Background Gradient
             LinearGradient(
                 gradient: Gradient(colors: [Color.pink.opacity(0.5), Color.blue.opacity(0.7)]),
                 startPoint: .top,
@@ -67,14 +68,33 @@ struct ChatView: View {
                     }
                 }
                 .padding()
+
+                Button(action: {
+                    showingRateUserView = true
+                }) {
+                    Text("Rate \(chatPartner.name)")
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.yellow)
+                        .cornerRadius(10)
+                        .shadow(radius: 5)
+                }
+                .padding()
+                .fullScreenCover(isPresented: $showingRateUserView) {
+                    RateUserView(chatPartner: chatPartner)
+                }
             }
         }
         .navigationTitle(chatPartner.name)
         .onAppear(perform: fetchMessages)
         .onDisappear {
-            listener?.remove()  // Stop listening for updates when view disappears
+            listener?.remove()
         }
     }
+
+
 
     private func fetchMessages() {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }

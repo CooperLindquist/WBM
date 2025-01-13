@@ -12,6 +12,8 @@
 		DB12D43F2D2DE03E00A4DA2B /* SpotlightView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB12D43E2D2DE03E00A4DA2B /* SpotlightView.swift */; };
 		DB12D4412D2E071900A4DA2B /* Utlities.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB12D4402D2E071900A4DA2B /* Utlities.swift */; };
 		DB1F77992D2F45D700DD6378 /* LoadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB1F77982D2F45D700DD6378 /* LoadingView.swift */; };
+		DB1F779B2D35B6FD00DD6378 /* StarsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB1F779A2D35B6FD00DD6378 /* StarsView.swift */; };
+		DB1F779D2D35B97700DD6378 /* RateUserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB1F779C2D35B97700DD6378 /* RateUserView.swift */; };
 		DB82876C2D2868F000A3795D /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB82876B2D2868F000A3795D /* OnboardingView.swift */; };
 		DB82876E2D28711100A3795D /* LanguageList.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB82876D2D28711100A3795D /* LanguageList.swift */; };
 		DB8287712D2876ED00A3795D /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = DB8287702D2876ED00A3795D /* FirebaseStorage */; };
@@ -46,6 +48,8 @@
 		DB12D43E2D2DE03E00A4DA2B /* SpotlightView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpotlightView.swift; sourceTree = "<group>"; };
 		DB12D4402D2E071900A4DA2B /* Utlities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utlities.swift; sourceTree = "<group>"; };
 		DB1F77982D2F45D700DD6378 /* LoadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingView.swift; sourceTree = "<group>"; };
+		DB1F779A2D35B6FD00DD6378 /* StarsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StarsView.swift; sourceTree = "<group>"; };
+		DB1F779C2D35B97700DD6378 /* RateUserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RateUserView.swift; sourceTree = "<group>"; };
 		DB82876B2D2868F000A3795D /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		DB82876D2D28711100A3795D /* LanguageList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageList.swift; sourceTree = "<group>"; };
 		DB8287722D28775100A3795D /* ImagePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePicker.swift; sourceTree = "<group>"; };
@@ -117,9 +121,11 @@
 				DBB4E97C2D28553000C44E47 /* Info.plist */,
 				DBB4E9562D28508300C44E47 /* WBMApp.swift */,
 				DB1F77982D2F45D700DD6378 /* LoadingView.swift */,
+				DB1F779A2D35B6FD00DD6378 /* StarsView.swift */,
 				DBB4E97F2D285B7200C44E47 /* TabBarView.swift */,
 				DB12D43A2D2B2F1100A4DA2B /* MessagesView.swift */,
 				DB12D43C2D2B3DA600A4DA2B /* ChatView.swift */,
+				DB1F779C2D35B97700DD6378 /* RateUserView.swift */,
 				DBB4E9872D285D6800C44E47 /* LikesView.swift */,
 				DBB4E9832D285D5300C44E47 /* HomePageView.swift */,
 				DB12D4402D2E071900A4DA2B /* Utlities.swift */,
@@ -238,6 +244,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				DBB4E9592D28508300C44E47 /* ContentView.swift in Sources */,
+				DB1F779B2D35B6FD00DD6378 /* StarsView.swift in Sources */,
 				DBB4E9882D285D6800C44E47 /* LikesView.swift in Sources */,
 				DB12D43F2D2DE03E00A4DA2B /* SpotlightView.swift in Sources */,
 				DB8287732D28775100A3795D /* ImagePicker.swift in Sources */,
@@ -247,6 +254,7 @@
 				DBB4E97E2D28560900C44E47 /* Start.swift in Sources */,
 				DBB4E9572D28508300C44E47 /* WBMApp.swift in Sources */,
 				DB82876E2D28711100A3795D /* LanguageList.swift in Sources */,
+				DB1F779D2D35B97700DD6378 /* RateUserView.swift in Sources */,
 				DBB4E9802D285B7200C44E47 /* TabBarView.swift in Sources */,
 				DB12D4412D2E071900A4DA2B /* Utlities.swift in Sources */,
 				DBB4E9822D285C8300C44E47 /* ProfileView.swift in Sources */,

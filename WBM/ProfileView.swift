@@ -15,6 +15,7 @@ import SDWebImageSwiftUI
 
 
 struct ProfileView: View {
+    @State private var showingStarsView = false
     @State private var showingOnboarding = false
     @State private var userData: [String: Any] = [:]
     @State private var isLoading = true
@@ -132,6 +133,32 @@ struct ProfileView: View {
                         .fullScreenCover(isPresented: $showingOnboarding) {
                             OnboardingView(initialProfileData: userData)
                         }
+                        
+                        
+                        Button(action: {
+                            // Navigate to StarsView
+                            showingStarsView = true
+                        }) {
+                            Text("View Ratings")
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [Color.yellow, Color.orange]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .cornerRadius(10)
+                                .shadow(radius: 5)
+                        }
+                        .padding(.horizontal, 16)
+                        .fullScreenCover(isPresented: $showingStarsView) {
+                            StarsView()
+                        }
+
 
                         // Sign Out Button
                         Button(action: signOut) {
