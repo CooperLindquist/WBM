@@ -1,16 +1,18 @@
 import SwiftUI
 import Firebase
-import SDWebImageSwiftUI
 import FirebaseAuth
+import SDWebImageSwiftUI
 
 struct StarsView: View {
+    @Environment(\.dismiss) private var dismiss
     @State private var isLoading = true
     @State private var ratings: [String: Double] = [:]
 
     var body: some View {
         ZStack {
+            // Background Gradient Matching ProfileView
             LinearGradient(
-                gradient: Gradient(colors: [Color.yellow.opacity(0.5), Color.orange.opacity(0.7)]),
+                gradient: Gradient(colors: [Color.pink.opacity(0.5), Color.blue.opacity(0.7)]),
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -21,12 +23,29 @@ struct StarsView: View {
                     .progressViewStyle(CircularProgressViewStyle())
             } else {
                 VStack(spacing: 20) {
-                    Text("Your Ratings")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                        .shadow(radius: 2)
+                    // Header with Back Button
+                    HStack {
+                        Button(action: {
+                            dismiss()
+                        }) {
+                            Image(systemName: "chevron.left")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                                .padding(10)
+                                .background(Color.black.opacity(0.4))
+                                .clipShape(Circle())
+                        }
+                        Spacer()
+                        Text("Your Ratings")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                            .shadow(radius: 2)
+                        Spacer() // Keeps title centered
+                    }
+                    .padding(.horizontal)
 
+                    // Ratings Display
                     VStack(spacing: 15) {
                         if let trueToLooks = ratings["trueToLooks"] {
                             ratingRow(title: "True to Looks", value: trueToLooks)
@@ -76,11 +95,17 @@ struct StarsView: View {
 
     private func ratingRow(title: String, value: Double) -> some View {
         HStack {
-            Text(title)
-                .fontWeight(.semibold)
-                .foregroundColor(.white)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                Text(String(format: "%.1f", value)) // Displays the accurate average as a number
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.8))
+            }
             Spacer()
             HStack(spacing: 4) {
+                // Displays stars, rounding down the value
                 ForEach(0..<5) { index in
                     Image(systemName: index < Int(value) ? "star.fill" : "star")
                         .foregroundColor(index < Int(value) ? .yellow : .gray)
