@@ -34,37 +34,49 @@ struct LikesView: View {
                         .foregroundColor(.white)
                         .padding()
                 } else {
-                    ScrollView {
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 20) {
-                            ForEach(likedUsers) { user in
-                                Button(action: {
-                                    selectedUser = user
-                                }) {
-                                    VStack {
-                                        WebImage(url: URL(string: user.imageURLs.first ?? ""))
-                                            .resizable()
-                                            .scaledToFill()
-                                            .frame(width: 150, height: 150)
-                                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                                        
-                                        Text(user.name)
-                                            .font(.headline)
-                                            .foregroundColor(.white)
+                    VStack{
+                        Text("Likes")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .padding()
+                            .offset(x: -150, y: -65)
+                        
+                        
+                        ScrollView {
+                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 20) {
+                                ForEach(likedUsers) { user in
+                                    Button(action: {
+                                        selectedUser = user
+                                    }) {
+                                        VStack {
+                                            WebImage(url: URL(string: user.imageURLs.first ?? ""))
+                                                .resizable()
+                                                .scaledToFill()
+                                                .frame(width: 150, height: 150)
+                                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                            
+                                            Text(user.name)
+                                                .font(.headline)
+                                                .foregroundColor(.white)
+                                        }
+                                        .padding()
+                                        .background(Color.white.opacity(0.2))
+                                        .cornerRadius(10)
+                                        .shadow(radius: 5)
                                     }
-                                    .padding()
-                                    .background(Color.white.opacity(0.2))
-                                    .cornerRadius(10)
-                                    .shadow(radius: 5)
                                 }
                             }
+                            .padding()
                         }
-                        .padding()
-                    }
-                    .refreshable {
-                        fetchLikedUsers()
+                        
+                        
+                        .refreshable {
+                            fetchLikedUsers()
+                        }
                     }
                 }
             }
+            
             .fullScreenCover(item: $selectedUser) { user in
                 VStack {
                     HStack {
@@ -110,6 +122,7 @@ struct LikesView: View {
             }
             .onAppear(perform: fetchLikedUsers)
         }
+        
     }
 
     private func fetchLikedUsers() {
