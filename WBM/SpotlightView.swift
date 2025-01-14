@@ -166,10 +166,36 @@ struct SpotlightView: View {
         }
         .onAppear(perform: loadSpotlightedUsersAndCount)
         .fullScreenCover(item: $selectedUser) { user in
-            UserCardView(
-                user: user,
-                onSkip: { skipUser(user: user) },
-                onApprove: { approveUser(user: user) }
+            VStack {
+                HStack {
+                    Button(action: { selectedUser = nil }) {
+                        Image(systemName: "chevron.backward")
+                            .font(.title2)
+                            .padding()
+                            .background(Circle().fill(Color.white.opacity(0.8)))
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal)
+                .padding(.top, 10)
+
+                Spacer()
+
+                UserCardView(user: user)
+                    .frame(width: 350, height: 500)
+                    .cornerRadius(20)
+                    .shadow(radius: 10)
+                    .padding(.top, 30)
+
+                Spacer()
+            }
+            .background(
+                LinearGradient(
+                    gradient: Gradient(colors: [Color.purple.opacity(0.5), Color.orange.opacity(0.5)]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .edgesIgnoringSafeArea(.all)
             )
         }
     }
@@ -191,7 +217,6 @@ struct SpotlightView: View {
 
         let currentUserRef = Firestore.firestore().collection("users").document(currentUserID)
 
-        // Fetch excluded users (likes, matches, swiped)
         currentUserRef.getDocument { document, error in
             if let error = error {
                 print("Error fetching user data: \(error.localizedDescription)")
@@ -209,7 +234,6 @@ struct SpotlightView: View {
             let matchedUsers = data["matches"] as? [String] ?? []
             let excludedUserIDs = Set(swipedUsers + likedUsers + matchedUsers)
 
-            // Fetch spotlighted users, excluding the current user's excluded IDs
             fetchSpotlightedUsers { userIds in
                 let filteredUserIds = userIds.filter { !excludedUserIDs.contains($0) }
 
@@ -237,7 +261,6 @@ struct SpotlightView: View {
                 }
             }
 
-            // Fetch spotlights remaining
             if let count = data["spotlightsRemaining"] as? Int {
                 DispatchQueue.main.async {
                     self.spotlightsRemaining = count
@@ -266,6 +289,7 @@ struct SpotlightView: View {
         selectedUser = nil
     }
 }
+
 
 
 

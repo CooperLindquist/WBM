@@ -66,19 +66,48 @@ struct LikesView: View {
                 }
             }
             .fullScreenCover(item: $selectedUser) { user in
-                UserCardView(
-                    user: user,
-                    onSkip: {
-                        handleAction(user: user, action: "reject")
-                        selectedUser = nil
-                    },
-                    onApprove: {
-                        handleAction(user: user, action: "accept")
-                        selectedUser = nil
+                VStack {
+                    HStack {
+                        Button(action: { selectedUser = nil }) {
+                            Image(systemName: "chevron.backward")
+                                .font(.title2)
+                                .padding()
+                                .background(Circle().fill(Color.white.opacity(0.8)))
+                        }
+                        Spacer()
                     }
+                    .padding(.horizontal)
+                    .padding(.top, 10)
+
+                    Spacer()
+
+                    UserCardView(
+                        user: user,
+                        onSkip: {
+                            handleAction(user: user, action: "reject")
+                            selectedUser = nil
+                        },
+                        onApprove: {
+                            handleAction(user: user, action: "accept")
+                            selectedUser = nil
+                        }
+                    )
+                    .frame(width: 350, height: 500)
+                    .cornerRadius(20)
+                    .shadow(radius: 10)
+                    .padding(.top, 30)
+
+                    Spacer()
+                }
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.purple.opacity(0.5), Color.orange.opacity(0.5)]),
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .edgesIgnoringSafeArea(.all)
                 )
             }
-
             .onAppear(perform: fetchLikedUsers)
         }
     }
@@ -138,8 +167,6 @@ struct LikesView: View {
         }
     }
 }
-
-
 
 
 

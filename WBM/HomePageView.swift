@@ -12,6 +12,7 @@ struct HomePageView: View {
 
     var body: some View {
         ZStack {
+            // Background Gradient
             LinearGradient(
                 gradient: Gradient(colors: [Color.pink.opacity(0.5), Color.blue.opacity(0.7)]),
                 startPoint: .top,
@@ -28,17 +29,42 @@ struct HomePageView: View {
                     .foregroundColor(.white)
             } else {
                 VStack {
+                    Spacer()
                     if let currentUser = users.last {
                         UserCardView(
                             user: currentUser,
                             onSkip: skipUser,
                             onApprove: approveUser
                         )
+                        .frame(width: 350, height: 500)
+                        .cornerRadius(20)
+                        .shadow(radius: 10)
+                        .padding(.top, 30.0)
+                        
                     }
+                    Spacer()
+
+                    // Action Buttons
+                    HStack(spacing: 30) {
+                        Button(action: { skipUser() }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 100))
+                                .foregroundColor(.red)
+                                
+                        }
+                        
+
+                        Button(action: { approveUser() }) {
+                            Image(systemName: "heart.circle.fill")
+                                .font(.system(size: 100))
+                                .foregroundColor(.green)
+                        }
+                    }
+                    .padding(.bottom, 40)
                 }
             }
 
-            // Move the filter button inside ZStack to ensure visibility
+            // Filter Button
             VStack {
                 HStack {
                     Spacer()
@@ -46,10 +72,14 @@ struct HomePageView: View {
                         showFilterSheet = true
                     }) {
                         Image(systemName: "line.horizontal.3.decrease.circle.fill")
-                            .font(.largeTitle)
+                            .font(.system(size: 40))
                             .foregroundColor(.white)
-                            .padding()
+                            .padding(10)
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Circle())
+                            .shadow(radius: 5)
                     }
+                    .padding()
                 }
                 Spacer()
             }
@@ -263,83 +293,126 @@ struct FilterSheet: View {
     }
 }
 
-// UserCardView
+
 struct UserCardView: View {
     let user: User
     var onSkip: (() -> Void)?
     var onApprove: (() -> Void)?
+    
+    @State private var currentImageIndex = 0
 
     var body: some View {
         VStack {
-            TabView {
-                ForEach(user.imageURLs, id: \.self) { imageUrl in
+            ZStack {
+                // User Image
+                if let imageUrl = user.imageURLs[safe: currentImageIndex] {
                     WebImage(url: URL(string: imageUrl))
                         .resizable()
                         .scaledToFill()
-                        .frame(height: 300)
-                        .clipShape(RoundedRectangle(cornerRadius: 20))
-                        .padding()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .edgesIgnoringSafeArea(.all)
+                        .onTapGesture { location in
+                            let screenWidth = UIScreen.main.bounds.width
+                            if location.x < screenWidth / 2 {
+                                showPreviousImage()
+                            } else {
+                                showNextImage()
+                            }
+                        }
+                }
+
+                // Bottom Gradient Overlay with User Details
+                VStack(alignment: .leading, spacing: 8) {
+                    // User Name
+                    Text(user.name)
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .shadow(radius: 3)
+
+                    // User Details with Icons
+                    HStack(spacing: 15) {
+                        if let formattedHeight = formatHeight(user.height) {
+                            Label("\(formattedHeight)", systemImage: "ruler")
+                                .font(.subheadline)
+                                .foregroundColor(.white)
+                                .shadow(radius: 2)
+                        }
+                        if let weight = user.weight {
+                            Label("\(weight) lbs", systemImage: "scalemass")
+                                .font(.subheadline)
+                                .foregroundColor(.white)
+                                .shadow(radius: 2)
+                        }
+                        if let gender = user.gender {
+                            Label("\(gender)", systemImage: "person.fill")
+                                .font(.subheadline)
+                                .foregroundColor(.white)
+                                .shadow(radius: 2)
+                        }
+                    }
+                }
+                .padding()
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.black.opacity(0.6), Color.clear]),
+                        startPoint: .bottom,
+                        endPoint: .top
+                    )
+                )
+                .frame(maxWidth: .infinity, alignment: .bottomLeading)
+                .offset(y: 200)
+
+                // Indicators for Images
+                VStack {
+                    Spacer()
+                    HStack {
+                        ForEach(user.imageURLs.indices, id: \.self) { index in
+                            Circle()
+                                .fill(index == currentImageIndex ? Color.white : Color.gray.opacity(0.7))
+                                .frame(width: 8, height: 8)
+                        }
+                    }
+                    .padding(.bottom, 15)
                 }
             }
-            .tabViewStyle(PageTabViewStyle())
-
-            Text(user.name)
-                .font(.title)
-                .fontWeight(.bold)
-                .padding(.top)
-
-            VStack(alignment: .leading, spacing: 5) {
-                if let formattedHeight = formatHeight(user.height) {
-                    Text("Height: \(formattedHeight)")
-                        .font(.body)
-                        .foregroundColor(.gray)
-                }
-                if let weight = user.weight {
-                    Text("Weight: \(weight) lbs")
-                        .font(.body)
-                        .foregroundColor(.gray)
-                }
-                if let gender = user.gender {
-                    Text("Gender: \(gender)")
-                        .font(.body)
-                        .foregroundColor(.gray)
-                }
-                // Keep languages and relationship goal here
-                if let languages = user.languages {
-                    Text("Languages: \(languages.joined(separator: ", "))")
-                        .font(.body)
-                        .foregroundColor(.gray)
-                }
-                if let relationshipGoal = user.relationshipGoal {
-                    Text("Relationship Goal: \(relationshipGoal)")
-                        .font(.body)
-                        .foregroundColor(.gray)
-                }
-            }
-            .padding()
 
             Spacer()
 
-            HStack {
-                Button(action: { onSkip?() }) {
-                    Image("skip")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 100)
-                }
-
-                Button(action: { onApprove?() }) {
-                    Image("check")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 93)
-                }
-            }
-            .padding()
+         
         }
-        .padding()
+    }
+
+    private func showNextImage() {
+        if currentImageIndex < user.imageURLs.count - 1 {
+            currentImageIndex += 1
+        }
+    }
+
+    private func showPreviousImage() {
+        if currentImageIndex > 0 {
+            currentImageIndex -= 1
+        }
+    }
+
+    private func formatHeight(_ height: String?) -> String? {
+        guard let height = height, let inches = Double(height) else { return nil }
+        let feet = Int(inches / 12)
+        let remainingInches = Int(inches.truncatingRemainder(dividingBy: 12))
+        return "\(feet)'\(remainingInches)\""
     }
 }
+
+
+extension Collection {
+    subscript(safe index: Index) -> Element? {
+        return indices.contains(index) ? self[index] : nil
+    }
+}
+
+
+
+
 
 struct User: Identifiable, Hashable {
     let id: String

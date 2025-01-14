@@ -222,8 +222,13 @@ struct OnboardingView: View {
                 switch result {
                 case .success(let data):
                     if let data = data, let uiImage = UIImage(data: data) {
-                        selectedImages.append(uiImage)
-                        uploadImageToCloudinary(imageData: data)
+                        // Crop to a vertical rectangle with a 3:4 aspect ratio
+                        if let croppedImage = cropImageToVerticalRectangle(uiImage, aspectRatio: 3.0 / 4.0) {
+                            selectedImages.append(croppedImage)
+                            if let croppedData = croppedImage.jpegData(compressionQuality: 0.8) {
+                                uploadImageToCloudinary(imageData: croppedData)
+                            }
+                        }
                     }
                 case .failure(let error):
                     print("Error loading image: \(error.localizedDescription)")
@@ -231,6 +236,8 @@ struct OnboardingView: View {
             }
         }
     }
+
+
 
     private func uploadImageToCloudinary(imageData: Data) {
         let params = CLDUploadRequestParams().setUploadPreset("profile pics")
@@ -245,6 +252,34 @@ struct OnboardingView: View {
             }
         })
     }
+    private func cropImageToVerticalRectangle(_ image: UIImage, aspectRatio: CGFloat = 3.0 / 4.0) -> UIImage? {
+        let originalWidth = image.size.width
+        let originalHeight = image.size.height
+        let originalAspectRatio = originalWidth / originalHeight
+
+        var cropWidth = originalWidth
+        var cropHeight = originalHeight
+
+        if originalAspectRatio > aspectRatio {
+            // Crop horizontally to match aspect ratio
+            cropWidth = originalHeight * aspectRatio
+        } else {
+            // Crop vertically to match aspect ratio
+            cropHeight = originalWidth / aspectRatio
+        }
+
+        let xOffset = (originalWidth - cropWidth) / 2
+        let yOffset = (originalHeight - cropHeight) / 2
+        let cropRect = CGRect(x: xOffset, y: yOffset, width: cropWidth, height: cropHeight)
+
+        guard let cgImage = image.cgImage?.cropping(to: cropRect) else { return nil }
+
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: cropWidth, height: cropHeight))
+        return renderer.image { _ in
+            UIImage(cgImage: cgImage).draw(in: CGRect(origin: .zero, size: CGSize(width: cropWidth, height: cropHeight)))
+        }
+    }
+
 
     private func saveImageUrlToFirestore(url: String) {
         guard let user = Auth.auth().currentUser else { return }
