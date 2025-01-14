@@ -1,10 +1,3 @@
-//
-//  GroupListView.swift
-//  WBM
-//
-//  Created by Cooper Lindquist on 1/3/25.
-//
-
 import SwiftUI
 import Firebase
 import SDWebImageSwiftUI
@@ -34,14 +27,13 @@ struct LikesView: View {
                         .foregroundColor(.white)
                         .padding()
                 } else {
-                    VStack{
+                    VStack {
                         Text("Likes")
                             .font(.largeTitle)
                             .fontWeight(.bold)
                             .padding()
                             .offset(x: -150, y: -65)
-                        
-                        
+
                         ScrollView {
                             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 20) {
                                 ForEach(likedUsers) { user in
@@ -54,7 +46,7 @@ struct LikesView: View {
                                                 .scaledToFill()
                                                 .frame(width: 150, height: 150)
                                                 .clipShape(RoundedRectangle(cornerRadius: 10))
-                                            
+
                                             Text(user.name)
                                                 .font(.headline)
                                                 .foregroundColor(.white)
@@ -68,15 +60,12 @@ struct LikesView: View {
                             }
                             .padding()
                         }
-                        
-                        
                         .refreshable {
                             fetchLikedUsers()
                         }
                     }
                 }
             }
-            
             .fullScreenCover(item: $selectedUser) { user in
                 VStack {
                     HStack {
@@ -96,11 +85,11 @@ struct LikesView: View {
                     UserCardView(
                         user: user,
                         onSkip: {
-                            handleAction(user: user, action: "reject")
+                            skipUser(user)
                             selectedUser = nil
                         },
                         onApprove: {
-                            handleAction(user: user, action: "accept")
+                            approveUser(user)
                             selectedUser = nil
                         }
                     )
@@ -110,6 +99,22 @@ struct LikesView: View {
                     .padding(.top, 30)
 
                     Spacer()
+
+                    // Skip & Approve Buttons
+                    HStack(spacing: 30) {
+                        Button(action: { skipUser(user) }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 100))
+                                .foregroundColor(.red)
+                        }
+
+                        Button(action: { approveUser(user) }) {
+                            Image(systemName: "heart.circle.fill")
+                                .font(.system(size: 100))
+                                .foregroundColor(.green)
+                        }
+                    }
+                    .padding(.bottom, 40)
                 }
                 .background(
                     LinearGradient(
@@ -122,12 +127,16 @@ struct LikesView: View {
             }
             .onAppear(perform: fetchLikedUsers)
         }
-        
     }
 
+    // Fetch the users who have liked the current user
     private func fetchLikedUsers() {
         isLoading = true
-        let currentUserID = Auth.auth().currentUser?.uid ?? ""
+        guard let currentUserID = Auth.auth().currentUser?.uid else {
+            isLoading = false
+            return
+        }
+
         Firestore.firestore().collection("users").document(currentUserID).getDocument { document, error in
             if let error = error {
                 print("Error fetching likes: \(error.localizedDescription)")
@@ -157,33 +166,95 @@ struct LikesView: View {
         }
     }
 
-    private func handleAction(user: User, action: String) {
+    // Skip User: Removes user from "likes" and adds to "swipedUsers"
+    private func skipUser(_ user: User) {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
 
         Firestore.firestore().collection("users").document(currentUserID).updateData([
-            "likes": FieldValue.arrayRemove([user.id])
+            "likes": FieldValue.arrayRemove([user.id]),
+            "swipedUsers": FieldValue.arrayUnion([user.id])
         ]) { error in
             if let error = error {
-                print("Error updating likes: \(error.localizedDescription)")
+                print("Error updating skipped user: \(error.localizedDescription)")
             } else {
                 likedUsers.removeAll { $0.id == user.id }
-                
-                if action == "accept" {
-                    Firestore.firestore().collection("users").document(user.id).updateData([
-                        "matches": FieldValue.arrayUnion([currentUserID])
-                    ])
-                    Firestore.firestore().collection("users").document(currentUserID).updateData([
-                        "matches": FieldValue.arrayUnion([user.id])
-                    ])
-                }
             }
         }
     }
+
+    // Approve User: Adds user to "matches" if both have liked each other
+    private func approveUser(_ user: User) {
+        guard let currentUserID = Auth.auth().currentUser?.uid else { return }
+
+        let currentUserRef = Firestore.firestore().collection("users").document(currentUserID)
+        let likedUserRef = Firestore.firestore().collection("users").document(user.id)
+
+        Firestore.firestore().runTransaction { transaction, errorPointer in
+            let currentUserDoc: DocumentSnapshot
+            let likedUserDoc: DocumentSnapshot
+
+            do {
+                try currentUserDoc = transaction.getDocument(currentUserRef)
+                try likedUserDoc = transaction.getDocument(likedUserRef)
+            } catch {
+                print("❌ Error fetching user documents: \(error.localizedDescription)")
+                return nil
+            }
+
+            // Get current user's likes (who liked them)
+            let currentUserLikes = currentUserDoc.data()?["likes"] as? [String] ?? []
+            // Get liked user's likes (who they liked)
+            let likedUserLikes = likedUserDoc.data()?["likes"] as? [String] ?? []
+
+            var currentUserMatches = currentUserDoc.data()?["matches"] as? [String] ?? []
+            var likedUserMatches = likedUserDoc.data()?["matches"] as? [String] ?? []
+
+            // Check if mutual match: If the liked user (user.id) is in my likes list
+            let isMutualLike = currentUserLikes.contains(user.id)
+
+            if isMutualLike {
+                // If mutual, add to matches
+                if !currentUserMatches.contains(user.id) {
+                    currentUserMatches.append(user.id)
+                }
+                if !likedUserMatches.contains(currentUserID) {
+                    likedUserMatches.append(currentUserID)
+                }
+
+                // Update Firestore
+                transaction.updateData([
+                    "matches": currentUserMatches,
+                    "likes": FieldValue.arrayRemove([user.id])
+                ], forDocument: currentUserRef)
+
+                transaction.updateData([
+                    "matches": likedUserMatches,
+                    "likes": FieldValue.arrayRemove([currentUserID])
+                ], forDocument: likedUserRef)
+
+                print("✅ Match created between \(currentUserID) and \(user.id)!")
+            } else {
+                // If not mutual, just store the like
+                transaction.updateData([
+                    "likes": FieldValue.arrayUnion([user.id])
+                ], forDocument: currentUserRef)
+
+                print("👍 Liked \(user.id), waiting for them to like back.")
+            }
+
+            return nil
+        } completion: { _, error in
+            if let error = error {
+                print("❌ Error processing like: \(error.localizedDescription)")
+            } else {
+                likedUsers.removeAll { $0.id == user.id } // Remove from UI
+            }
+        }
+    }
+
 }
 
-
-
-
+// SwiftUI Preview
 #Preview {
     LikesView()
 }

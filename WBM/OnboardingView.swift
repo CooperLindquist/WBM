@@ -5,6 +5,7 @@ import FirebaseAuth
 import Cloudinary
 
 struct OnboardingView: View {
+    @State private var profileImageURLs: [String] = []
     @State var initialProfileData: [String: Any] = [:]
     @State private var name: String = ""
     @State private var bio: String = ""
@@ -206,13 +207,84 @@ struct OnboardingView: View {
     }
 
     private func removeProfilePicture(at index: Int) {
+        guard index < selectedImages.count, index < profileImageURLs.count else { return }
+
         let removedImage = selectedImages.remove(at: index)
-        deleteImageFromCloudinary(image: removedImage)
+        let imageUrl = profileImageURLs.remove(at: index) // Remove URL from the array
+
+        removeImageUrlFromFirestore(imageUrl: imageUrl) // Remove from Firestore
     }
 
-    private func deleteImageFromCloudinary(image: UIImage) {
-        // Logic to delete image from Cloudinary
+
+//    private func deleteImageFromCloudinary(imageUrl: String, completion: @escaping (Bool) -> Void) {
+//        guard let url = URL(string: imageUrl) else {
+//            completion(false)
+//            return
+//        }
+//
+//        let components = url.pathComponents
+//        guard let publicIdWithExtension = components.last else {
+//            completion(false)
+//            return
+//        }
+//
+//        let publicId = publicIdWithExtension.components(separatedBy: ".").first ?? ""
+//
+//        let cloudinaryManager = cloudinary.createManagementApi()
+//        cloudinaryManager.deleteResources(["upload"], publicIds: [publicId], options: nil) { result, error in
+//            if let error = error {
+//                print("Error deleting image from Cloudinary: \(error.localizedDescription)")
+//                completion(false)
+//            } else {
+//                print("Successfully deleted image from Cloudinary")
+//                completion(true)
+//            }
+//        }
+//    }
+
+    private func removeImageUrlFromFirestore(imageUrl: String) {
+        guard let user = Auth.auth().currentUser else {
+            print("No authenticated user found")
+            return
+        }
+        let userDoc = Firestore.firestore().collection("users").document(user.uid)
+        
+        // Fetch the document to check if 'profileImageURLs' exists and is an array
+        userDoc.getDocument { document, error in
+            if let error = error {
+                print("❌ Error fetching document: \(error.localizedDescription)")
+                return
+            }
+            
+            guard let document = document, document.exists else {
+                print("❌ Document does not exist")
+                return
+            }
+
+            // Confirm the profileImageURLs field exists and is an array
+            if let imageUrls = document.data()?["profileImageURLs"] as? [String] {
+                print("Existing profileImageURLs: \(imageUrls)")
+
+                // Proceed to remove the image URL from the array
+                userDoc.updateData([
+                    "profileImageURLs": FieldValue.arrayRemove([imageUrl])
+                ]) { error in
+                    if let error = error {
+                        print("❌ Error removing image URL from Firestore: \(error.localizedDescription)")
+                    } else {
+                        print("✅ Successfully removed image URL from Firestore: \(imageUrl)")
+                    }
+                }
+            } else {
+                print("❌ profileImageURLs is not an array or doesn't exist")
+            }
+        }
     }
+
+ 
+    
+
+
 
     private func loadImages(from items: [PhotosPickerItem]) {
         for item in items {

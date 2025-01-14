@@ -188,6 +188,26 @@ struct SpotlightView: View {
                     .padding(.top, 30)
 
                 Spacer()
+                
+                // 🆕 Skip & Like Buttons
+                HStack {
+                    Button(action: { skipUser(user: user) }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .resizable()
+                            .frame(width: 60, height: 60)
+                            .foregroundColor(.red)
+                    }
+                    .padding(.horizontal, 40)
+
+                    Button(action: { approveUser(user: user) }) {
+                        Image(systemName: "heart.circle.fill")
+                            .resizable()
+                            .frame(width: 60, height: 60)
+                            .foregroundColor(.green)
+                    }
+                    .padding(.horizontal, 40)
+                }
+                .padding(.bottom, 30)
             }
             .background(
                 LinearGradient(
@@ -198,6 +218,7 @@ struct SpotlightView: View {
                 .edgesIgnoringSafeArea(.all)
             )
         }
+
     }
 
     private func useSpotlight() {
@@ -275,18 +296,56 @@ struct SpotlightView: View {
     }
 
     private func approveUser(user: User) {
-        spotlightedUsers.removeAll { $0.id == user.id }
-
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
-        Firestore.firestore().collection("users").document(user.id).updateData([
-            "likes": FieldValue.arrayUnion([currentUserID])
-        ]) { error in
+
+        let currentUserRef = Firestore.firestore().collection("users").document(currentUserID)
+        let likedUserRef = Firestore.firestore().collection("users").document(user.id)
+
+        Firestore.firestore().runTransaction { transaction, errorPointer in
+            let currentUserDoc: DocumentSnapshot
+            let likedUserDoc: DocumentSnapshot
+
+            do {
+                try currentUserDoc = transaction.getDocument(currentUserRef)
+                try likedUserDoc = transaction.getDocument(likedUserRef)
+            } catch {
+                print("❌ Error fetching user documents: \(error.localizedDescription)")
+                return nil
+            }
+
+            let currentUserLikes = currentUserDoc.data()?["likes"] as? [String] ?? []
+            let likedUserLikes = likedUserDoc.data()?["likes"] as? [String] ?? []
+            var currentUserMatches = currentUserDoc.data()?["matches"] as? [String] ?? []
+            var likedUserMatches = likedUserDoc.data()?["matches"] as? [String] ?? []
+
+            let isMutualLike = currentUserLikes.contains(user.id)
+
+            if isMutualLike {
+                if !currentUserMatches.contains(user.id) {
+                    currentUserMatches.append(user.id)
+                }
+                if !likedUserMatches.contains(currentUserID) {
+                    likedUserMatches.append(currentUserID)
+                }
+
+                transaction.updateData(["matches": currentUserMatches, "likes": FieldValue.arrayRemove([user.id])], forDocument: currentUserRef)
+                transaction.updateData(["matches": likedUserMatches, "likes": FieldValue.arrayRemove([currentUserID])], forDocument: likedUserRef)
+
+                print("✅ Match created between \(currentUserID) and \(user.id)!")
+            } else {
+                transaction.updateData(["likes": FieldValue.arrayUnion([user.id])], forDocument: currentUserRef)
+                print("👍 Liked \(user.id), waiting for them to like back.")
+            }
+
+            return nil
+        } completion: { _, error in
             if let error = error {
-                print("Error approving user: \(error.localizedDescription)")
+                print("❌ Error processing like: \(error.localizedDescription)")
+            } else {
+                spotlightedUsers.removeAll { $0.id == user.id }
+                selectedUser = nil
             }
         }
-
-        selectedUser = nil
     }
 }
 
