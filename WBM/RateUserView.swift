@@ -6,6 +6,8 @@ struct RateUserView: View {
     @State private var trueToLooksRating: Int = 3
     @State private var personalityRating: Int = 3
     @State private var communicationRating: Int = 3
+    @State private var showAlert: Bool = false
+    @State private var hasRated: Bool = false
     @Environment(\.presentationMode) var presentationMode
 
     var body: some View {
@@ -18,31 +20,61 @@ struct RateUserView: View {
             .edgesIgnoringSafeArea(.all)
 
             VStack(spacing: 20) {
+                HStack {
+                    Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                        Image(systemName: "chevron.left")
+                            .foregroundColor(.white)
+                            .font(.title2)
+                            .padding(.leading)
+                    }
+                    Spacer()
+                }
+
                 Text("Rate \(chatPartner.name)")
                     .font(.largeTitle)
                     .fontWeight(.bold)
                     .foregroundColor(.white)
                     .shadow(radius: 2)
 
-                ratingStars(title: "True to Looks", rating: $trueToLooksRating)
-                ratingStars(title: "Personality", rating: $personalityRating)
-                ratingStars(title: "Communication", rating: $communicationRating)
-
-                Button(action: submitRatings) {
-                    Text("Submit Ratings")
+                if hasRated {
+                    Text("You have already rated this user.")
                         .fontWeight(.bold)
                         .foregroundColor(.white)
                         .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(Color.green)
-                        .cornerRadius(10)
-                        .shadow(radius: 5)
+                } else {
+                    ratingStars(title: "True to Looks", rating: $trueToLooksRating)
+                    ratingStars(title: "Personality", rating: $personalityRating)
+                    ratingStars(title: "Communication", rating: $communicationRating)
+
+                    Button(action: {
+                        showAlert = true
+                    }) {
+                        Text("Submit Ratings")
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                            .background(Color.green)
+                            .cornerRadius(10)
+                            .shadow(radius: 5)
+                    }
+                    .padding(.horizontal)
                 }
-                .padding(.horizontal)
 
                 Spacer()
             }
             .padding()
+        }
+        .alert(isPresented: $showAlert) {
+            Alert(
+                title: Text("Submit Rating"),
+                message: Text("Are you sure you want to submit this rating? Once you submit a rating, you cannot change it."),
+                primaryButton: .default(Text("Yes"), action: submitRatings),
+                secondaryButton: .cancel(Text("No"))
+            )
+        }
+        .onAppear {
+            checkIfUserHasRated()
         }
     }
 
@@ -89,7 +121,6 @@ struct RateUserView: View {
                 }
                 Firestore.firestore().collection("stars").document(chatPartner.id).setData(data)
             } else {
-                // No previous ratings, create new data
                 var newData: [String: Any] = [:]
                 for (key, newRating) in ratings {
                     newData[key] = newRating
@@ -98,7 +129,24 @@ struct RateUserView: View {
                 Firestore.firestore().collection("stars").document(chatPartner.id).setData(newData)
             }
 
-            presentationMode.wrappedValue.dismiss()
+            Firestore.firestore().collection("ratingsSubmitted").document(chatPartner.id).setData([
+                "hasRated": true
+            ])
+
+            hasRated = true
+        }
+    }
+
+    private func checkIfUserHasRated() {
+        Firestore.firestore().collection("ratingsSubmitted").document(chatPartner.id).getDocument { document, error in
+            if let error = error {
+                print("Error checking rating status: \(error.localizedDescription)")
+                return
+            }
+
+            if let document = document, document.exists {
+                hasRated = true
+            }
         }
     }
 }
