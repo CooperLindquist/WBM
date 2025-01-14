@@ -5,6 +5,10 @@ import FirebaseAuth
 import Cloudinary
 
 struct OnboardingView: View {
+    @State private var profileDataUpdated: Bool = false
+    @State private var uploadingImageIndices: Set<Int> = []
+    @State private var uploadsInProgress: Int = 0
+    @State private var isUploadingImages: Bool = false
     @State private var profileImageURLs: [String] = []
     @State var initialProfileData: [String: Any] = [:]
     @State private var name: String = ""
@@ -146,12 +150,24 @@ struct OnboardingView: View {
                     HStack(spacing: 15) {
                         ForEach(selectedImages.indices, id: \.self) { index in
                             VStack {
-                                Image(uiImage: selectedImages[index])
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 100, height: 100)
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                ZStack {
+                                    // Image
+                                    Image(uiImage: selectedImages[index])
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 100, height: 100)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
 
+                                    // Loading indicator if the image is still uploading
+                                    if uploadingImageIndices.contains(index) {
+                                        Color.black.opacity(0.5)
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .scaleEffect(2)
+                                    }
+                                }
+
+                                // Trash button
                                 Button(action: {
                                     removeProfilePicture(at: index)
                                 }) {
@@ -181,6 +197,7 @@ struct OnboardingView: View {
         }
     }
 
+
     private var SaveButton: some View {
         Button(action: saveProfileData) {
             Text("Save")
@@ -188,10 +205,13 @@ struct OnboardingView: View {
                 .foregroundColor(.white)
                 .padding()
                 .frame(maxWidth: .infinity)
-                .background(Color.blue)
+                .background(isUploadingImages ? Color.gray : Color.blue)
                 .cornerRadius(10)
         }
+        .disabled(isUploadingImages)  // Disable if images are still uploading
     }
+
+
 
     private func SectionView<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 15) {
@@ -216,31 +236,6 @@ struct OnboardingView: View {
     }
 
 
-//    private func deleteImageFromCloudinary(imageUrl: String, completion: @escaping (Bool) -> Void) {
-//        guard let url = URL(string: imageUrl) else {
-//            completion(false)
-//            return
-//        }
-//
-//        let components = url.pathComponents
-//        guard let publicIdWithExtension = components.last else {
-//            completion(false)
-//            return
-//        }
-//
-//        let publicId = publicIdWithExtension.components(separatedBy: ".").first ?? ""
-//
-//        let cloudinaryManager = cloudinary.createManagementApi()
-//        cloudinaryManager.deleteResources(["upload"], publicIds: [publicId], options: nil) { result, error in
-//            if let error = error {
-//                print("Error deleting image from Cloudinary: \(error.localizedDescription)")
-//                completion(false)
-//            } else {
-//                print("Successfully deleted image from Cloudinary")
-//                completion(true)
-//            }
-//        }
-//    }
 
     private func removeImageUrlFromFirestore(imageUrl: String) {
         guard let user = Auth.auth().currentUser else {
@@ -283,22 +278,23 @@ struct OnboardingView: View {
 
  
     
-
-
-
     private func loadImages(from items: [PhotosPickerItem]) {
-        for item in items {
+        isUploadingImages = true
+        uploadsInProgress = items.count
+
+        for (index, item) in items.enumerated() {
             guard selectedImages.count < 6 else { return }
+
+            uploadingImageIndices.insert(index) // Mark the image as uploading
 
             item.loadTransferable(type: Data.self) { result in
                 switch result {
                 case .success(let data):
                     if let data = data, let uiImage = UIImage(data: data) {
-                        // Crop to a vertical rectangle with a 3:4 aspect ratio
                         if let croppedImage = cropImageToVerticalRectangle(uiImage, aspectRatio: 3.0 / 4.0) {
                             selectedImages.append(croppedImage)
                             if let croppedData = croppedImage.jpegData(compressionQuality: 0.8) {
-                                uploadImageToCloudinary(imageData: croppedData)
+                                uploadImageToCloudinary(imageData: croppedData, atIndex: index)
                             }
                         }
                     }
@@ -309,9 +305,7 @@ struct OnboardingView: View {
         }
     }
 
-
-
-    private func uploadImageToCloudinary(imageData: Data) {
+    private func uploadImageToCloudinary(imageData: Data, atIndex index: Int) {
         let params = CLDUploadRequestParams().setUploadPreset("profile pics")
 
         cloudinary.createUploader().upload(data: imageData, uploadPreset: "profile pics", params: params, completionHandler: { result, error in
@@ -322,8 +316,19 @@ struct OnboardingView: View {
                     saveImageUrlToFirestore(url: secureUrl)
                 }
             }
+
+            // Decrement the number of uploads in progress
+            uploadsInProgress -= 1
+            uploadingImageIndices.remove(index) // Mark the image as uploaded
+
+            // Once all uploads are complete, set isUploadingImages to false
+            if uploadsInProgress == 0 {
+                isUploadingImages = false
+            }
         })
     }
+
+
     private func cropImageToVerticalRectangle(_ image: UIImage, aspectRatio: CGFloat = 3.0 / 4.0) -> UIImage? {
         let originalWidth = image.size.width
         let originalHeight = image.size.height
@@ -424,9 +429,20 @@ struct OnboardingView: View {
             "relationshipGoal": relationshipGoal,
             "languages": selectedLanguages
         ]
-        Firestore.firestore().collection("users").document(user.uid).setData(updatedData, merge: true)
-        dismiss()
+        Firestore.firestore().collection("users").document(user.uid).setData(updatedData, merge: true) { error in
+            if let error = error {
+                print("Error saving profile data: \(error.localizedDescription)")
+            } else {
+                print("Successfully saved profile data.")
+                // Set the profile data updated flag to true
+                profileDataUpdated = true
+                loadInitialData() // Reload profile data
+                dismiss() // Dismiss the onboarding view
+            }
+        }
     }
+
+
 }
 
 struct FilledButtonStyle: ButtonStyle {
