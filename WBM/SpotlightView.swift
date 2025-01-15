@@ -227,10 +227,12 @@ struct SpotlightView: View {
         if spotlightsRemaining > 0 {
             addToSpotlight(userID: currentUserID)
             spotlightsRemaining -= 1
+            loadSpotlightedUsersAndCount() // Refresh the page
         } else {
             print("No spotlights remaining.")
         }
     }
+
 
     private func loadSpotlightedUsersAndCount() {
         isLoading = true

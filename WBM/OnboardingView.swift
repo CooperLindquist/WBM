@@ -444,6 +444,21 @@ struct OnboardingView: View {
 
 
 }
+extension UIImage {
+    func normalizedImage() -> UIImage {
+        if imageOrientation == .up {
+            return self // No adjustment needed
+        }
+
+        UIGraphicsBeginImageContextWithOptions(size, false, scale)
+        draw(in: CGRect(origin: .zero, size: size))
+        let normalizedImage = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+
+        return normalizedImage ?? self
+    }
+}
+
 
 struct FilledButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {

@@ -29,19 +29,29 @@ class SessionManager: ObservableObject {
             // Check if the user exists in the Firestore database
             let userRef = Firestore.firestore().collection("users").document(user.uid)
             userRef.getDocument { document, error in
+                if let error = error {
+                    print("Error fetching user document: \(error.localizedDescription)")
+                    self.isLoading = false
+                    self.isSignedIn = false
+                    return
+                }
+
                 if let document = document, document.exists {
                     self.isFirstTimeUser = false
                     self.isSignedIn = true
                 } else {
                     self.isFirstTimeUser = true
+                    self.isSignedIn = true // Set to true to proceed to onboarding
                 }
                 self.isLoading = false // Stop loading after the check
             }
         } else {
             isSignedIn = false
+            isFirstTimeUser = false
             isLoading = false // Stop loading if no user is signed in
         }
     }
+
 
     func signOut() {
         do {

@@ -16,10 +16,14 @@ struct Start: View {
 
     var body: some View {
         Group {
-            if sessionManager.isSignedIn {
-                TabBarView()
-            } else if sessionManager.isFirstTimeUser {
-                OnboardingView()
+            if sessionManager.isLoading {
+                LoadingView()  // Show loading view while checking auth state
+            } else if sessionManager.isSignedIn {
+                if sessionManager.isFirstTimeUser {
+                    OnboardingView()
+                } else {
+                    TabBarView()
+                }
             } else {
                 ZStack {
                     // Gradient background
@@ -88,6 +92,7 @@ struct Start: View {
     }
 
     private func checkAuthState() {
+        sessionManager.isLoading = true  // Show loading state
         if let user = Auth.auth().currentUser {
             let userRef = Firestore.firestore().collection("users").document(user.uid)
             userRef.getDocument { document, error in
@@ -96,10 +101,13 @@ struct Start: View {
                     sessionManager.isSignedIn = true
                 } else {
                     sessionManager.isFirstTimeUser = true
+                    sessionManager.isSignedIn = true  // Still signed in, but first time user
                 }
+                sessionManager.isLoading = false  // Stop loading after the check
             }
         } else {
             sessionManager.isSignedIn = false
+            sessionManager.isLoading = false  // Stop loading if no user is signed in
         }
     }
 
@@ -142,6 +150,7 @@ struct Start: View {
         }
     }
 }
+
 
 #Preview {
     Start()

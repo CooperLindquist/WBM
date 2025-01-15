@@ -36,11 +36,36 @@ struct HomePageView: View {
                             onSkip: skipUser,
                             onApprove: approveUser
                         )
-                        .frame(width: 350, height: 500)
-                        .cornerRadius(20)
-                        .shadow(radius: 10)
-                        .padding(.top, 30.0)
+                        .frame(width: 400, height: 600)
+                        .cornerRadius(25)
+                        .shadow(radius: 15)
+                        .padding(.top, 20)
                         
+                        
+                        if let bio = currentUser.bio, !bio.isEmpty {
+                            HStack(alignment: .top, spacing: 10) {
+                                // Optional Bio Icon
+                                Image(systemName: "quote.bubble.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.blue.opacity(0.8))
+                                    .padding(.top, 5)
+                                
+                                // Bio Text
+                                Text(bio)
+                                    .font(.body)
+                                    .foregroundColor(.white)
+                                    .multilineTextAlignment(.leading)
+                                    .lineLimit(nil) // Allow multiline
+                            }
+                            .padding(15)
+                            .background(
+                                RoundedRectangle(cornerRadius: 15)
+                                    .fill(Color.black.opacity(0.6))
+                                    .blur(radius: 2)
+                            )
+                            .padding(.top, 10)
+                            .frame(maxWidth: 350) // Match card width
+                        }
                     }
                     Spacer()
 
@@ -48,7 +73,7 @@ struct HomePageView: View {
                     HStack(spacing: 30) {
                         Button(action: { skipUser() }) {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 100))
+                                .font(.system(size: 70))
                                 .foregroundColor(.red)
                                 
                         }
@@ -56,11 +81,11 @@ struct HomePageView: View {
 
                         Button(action: { approveUser() }) {
                             Image(systemName: "heart.circle.fill")
-                                .font(.system(size: 100))
+                                .font(.system(size: 70))
                                 .foregroundColor(.green)
                         }
                     }
-                    .padding(.bottom, 40)
+                    .padding(.bottom, 20)
                 }
             }
 
@@ -361,7 +386,7 @@ struct UserCardView: View {
                     )
                 )
                 .frame(maxWidth: .infinity, alignment: .bottomLeading)
-                .offset(y: 200)
+                .offset(x: 30, y: 248)
 
                 // Indicators for Images
                 VStack {
