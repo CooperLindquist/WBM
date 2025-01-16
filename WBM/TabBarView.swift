@@ -29,6 +29,7 @@ struct TabBarView: View {
                         }
                     }
             }
+            .navigationViewStyle(StackNavigationViewStyle())
 
             // Tab bar
             ZStack {

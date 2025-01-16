@@ -2,18 +2,45 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>com.googleusercontent.apps.993687334121-h524e15k90jvqnn6hee7fq8ni3b5g9pc</string>
-			</array>
-		</dict>
-	</array>
-	<key>GIDClientID</key>
-	<string>993687334121-h524e15k90jvqnn6hee7fq8ni3b5g9pc.apps.googleusercontent.com</string>
+    <!-- Define URL schemes for deep linking -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>com.googleusercontent.apps.993687334121-h524e15k90jvqnn6hee7fq8ni3b5g9pc</string>
+            </array>
+        </dict>
+    </array>
+    
+    <!-- Google Client ID -->
+    <key>GIDClientID</key>
+    <string>993687334121-h524e15k90jvqnn6hee7fq8ni3b5g9pc.apps.googleusercontent.com</string>
+    
+    <!-- Specify supported devices -->
+    <key>UIDeviceFamily</key>
+    <array>
+        <integer>1</integer> <!-- iPhone -->
+    </array>
+    
+    <!-- Force full-screen mode (disables multitasking on iPad) -->
+    <key>UIRequiresFullScreen</key>
+    <true/>
+    
+    <!-- Disable multiple scene support -->
+    <key>UIApplicationSceneManifest</key>
+    <dict>
+        <key>UISupportsMultipleScenes</key>
+        <false/>
+    </dict>
+    
+    <!-- Force iPhone-style layout on iPad -->
+    <key>UISupportedInterfaceOrientations~ipad</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+    </array>
 </dict>
 </plist>

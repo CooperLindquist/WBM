@@ -127,6 +127,7 @@ struct LikesView: View {
             }
             .onAppear(perform: fetchLikedUsers)
         }
+        .navigationViewStyle(StackNavigationViewStyle())
     }
 
     // Fetch the users who have liked the current user
