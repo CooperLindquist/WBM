@@ -36,36 +36,15 @@ struct HomePageView: View {
                             onSkip: skipUser,
                             onApprove: approveUser
                         )
-                        .frame(width: 400, height: 600)
+                        .frame(maxWidth: UIScreen.main.bounds.width * 0.9) // Adjust width to 90% of the screen
+                        .aspectRatio(2/4, contentMode: .fit) // Keep the desired height
                         .cornerRadius(25)
                         .shadow(radius: 15)
+                        .padding(.horizontal, 15) // Add extra padding for narrower look
                         .padding(.top, 20)
+                       
                         
                         
-                        if let bio = currentUser.bio, !bio.isEmpty {
-                            HStack(alignment: .top, spacing: 10) {
-                                // Optional Bio Icon
-                                Image(systemName: "quote.bubble.fill")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(.blue.opacity(0.8))
-                                    .padding(.top, 5)
-                                
-                                // Bio Text
-                                Text(bio)
-                                    .font(.body)
-                                    .foregroundColor(.white)
-                                    .multilineTextAlignment(.leading)
-                                    .lineLimit(nil) // Allow multiline
-                            }
-                            .padding(15)
-                            .background(
-                                RoundedRectangle(cornerRadius: 15)
-                                    .fill(Color.black.opacity(0.6))
-                                    .blur(radius: 2)
-                            )
-                            .padding(.top, 10)
-                            .frame(maxWidth: 350) // Match card width
-                        }
                     }
                     Spacer()
 
@@ -216,6 +195,7 @@ struct Filters {
     var weightFilterEnabled: Bool = false
     var heightFilterEnabled: Bool = false
     var genderFilterEnabled: Bool = false
+    
 
     func matches(user: User) -> Bool {
         if weightFilterEnabled {
@@ -386,7 +366,7 @@ struct UserCardView: View {
                     )
                 )
                 .frame(maxWidth: .infinity, alignment: .bottomLeading)
-                .offset(x: 30, y: 248)
+                .offset(x: 50, y: 255)
 
                 // Indicators for Images
                 VStack {

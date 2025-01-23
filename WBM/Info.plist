@@ -42,5 +42,9 @@
         <string>UIInterfaceOrientationPortrait</string>
         <string>UIInterfaceOrientationPortraitUpsideDown</string>
     </array>
+    
+    <!-- Add location permission description -->
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>We need your location to filter nearby profiles.</string>
 </dict>
 </plist>

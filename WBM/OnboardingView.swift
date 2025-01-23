@@ -329,7 +329,7 @@ struct OnboardingView: View {
     }
 
 
-    private func cropImageToVerticalRectangle(_ image: UIImage, aspectRatio: CGFloat = 3.0 / 4.0) -> UIImage? {
+    private func cropImageToVerticalRectangle(_ image: UIImage, aspectRatio: CGFloat = 2.0 / 4.0) -> UIImage? {
         let originalWidth = image.size.width
         let originalHeight = image.size.height
         let originalAspectRatio = originalWidth / originalHeight
@@ -356,6 +356,7 @@ struct OnboardingView: View {
             UIImage(cgImage: cgImage).draw(in: CGRect(origin: .zero, size: CGSize(width: cropWidth, height: cropHeight)))
         }
     }
+
 
 
     private func saveImageUrlToFirestore(url: String) {
