@@ -9,92 +9,118 @@ struct HomePageView: View {
     @State private var isLoading = true
     @State private var showFilterSheet = false
     @State private var filters: Filters = Filters.loadFilters()
+    @State private var diamonds: Int = 0
 
     var body: some View {
-        ZStack {
-            // Background Gradient
-            LinearGradient(
-                gradient: Gradient(colors: [Color.pink.opacity(0.5), Color.blue.opacity(0.7)]),
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .edgesIgnoringSafeArea(.all)
+            ZStack {
+                // Background Gradient
+                LinearGradient(
+                    gradient: Gradient(colors: [Color.pink.opacity(0.5), Color.blue.opacity(0.7)]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .edgesIgnoringSafeArea(.all)
 
-            if isLoading {
-                ProgressView("Loading Users...")
-                    .progressViewStyle(CircularProgressViewStyle())
-            } else if users.isEmpty {
-                Text("No more users available!")
-                    .font(.headline)
-                    .foregroundColor(.white)
-            } else {
+                if isLoading {
+                    ProgressView("Loading Users...")
+                        .progressViewStyle(CircularProgressViewStyle())
+                } else if users.isEmpty {
+                    Text("No more users available!")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                } else {
+                    VStack {
+                        Spacer()
+                        if let currentUser = users.last {
+                            UserCardView(
+                                user: currentUser,
+                                onSkip: skipUser,
+                                onApprove: approveUser
+                            )
+                            .frame(maxWidth: UIScreen.main.bounds.width * 0.9) // Adjust width to 90% of the screen
+                            .aspectRatio(2/4, contentMode: .fit) // Keep the desired height
+                            .cornerRadius(25)
+                            .shadow(radius: 15)
+                            .padding(.horizontal, 15) // Add extra padding for narrower look
+                            .padding(.top, 20)
+                        }
+                        Spacer()
+
+                        // Action Buttons
+                        HStack(spacing: 30) {
+                            Button(action: { skipUser() }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 70))
+                                    .foregroundColor(.red)
+                            }
+
+                            Button(action: { approveUser() }) {
+                                Image(systemName: "heart.circle.fill")
+                                    .font(.system(size: 70))
+                                    .foregroundColor(.green)
+                            }
+                        }
+                        .padding(.bottom, 20)
+                    }
+                }
+
+                // Top Bar with Diamonds and Filter Button
                 VStack {
-                    Spacer()
-                    if let currentUser = users.last {
-                        UserCardView(
-                            user: currentUser,
-                            onSkip: skipUser,
-                            onApprove: approveUser
-                        )
-                        .frame(maxWidth: UIScreen.main.bounds.width * 0.9) // Adjust width to 90% of the screen
-                        .aspectRatio(2/4, contentMode: .fit) // Keep the desired height
-                        .cornerRadius(25)
-                        .shadow(radius: 15)
-                        .padding(.horizontal, 15) // Add extra padding for narrower look
-                        .padding(.top, 20)
-                       
+                    HStack {
+                        Spacer()
                         
-                        
+                        // Diamonds Display
+                        HStack {
+                            Image(systemName: "diamond.fill")
+                                .foregroundColor(.yellow)
+                                .font(.title2)
+                            Text("\(diamonds)")
+                                .foregroundColor(.white)
+                                .fontWeight(.bold)
+                                .font(.title2)
+                        }
+                        .padding(.trailing, 10)
+
+                        // Filter Button
+                        Button(action: {
+                            showFilterSheet = true
+                        }) {
+                            Image(systemName: "line.horizontal.3.decrease.circle.fill")
+                                .font(.system(size: 40))
+                                .foregroundColor(.white)
+                                .padding(10)
+                                .background(Color.black.opacity(0.6))
+                                .clipShape(Circle())
+                                .shadow(radius: 5)
+                        }
+                        .padding()
                     }
                     Spacer()
-
-                    // Action Buttons
-                    HStack(spacing: 30) {
-                        Button(action: { skipUser() }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 70))
-                                .foregroundColor(.red)
-                                
-                        }
-                        
-
-                        Button(action: { approveUser() }) {
-                            Image(systemName: "heart.circle.fill")
-                                .font(.system(size: 70))
-                                .foregroundColor(.green)
-                        }
-                    }
-                    .padding(.bottom, 20)
                 }
             }
-
-            // Filter Button
-            VStack {
-                HStack {
-                    Spacer()
-                    Button(action: {
-                        showFilterSheet = true
-                    }) {
-                        Image(systemName: "line.horizontal.3.decrease.circle.fill")
-                            .font(.system(size: 40))
-                            .foregroundColor(.white)
-                            .padding(10)
-                            .background(Color.black.opacity(0.6))
-                            .clipShape(Circle())
-                            .shadow(radius: 5)
-                    }
-                    .padding()
-                }
-                Spacer()
+            .sheet(isPresented: $showFilterSheet) {
+                FilterSheet(filters: $filters, applyFilters: applyFilters)
+            }
+            .onAppear {
+                loadExcludedUsersAndFetchUsers()
+                fetchDiamonds() // Fetch the diamond count
             }
         }
-        .sheet(isPresented: $showFilterSheet) {
-            FilterSheet(filters: $filters, applyFilters: applyFilters)
+    private func fetchDiamonds() {
+            guard let currentUserID = Auth.auth().currentUser?.uid else { return }
+            let userDoc = Firestore.firestore().collection("users").document(currentUserID)
+
+            userDoc.getDocument { document, error in
+                if let error = error {
+                    print("Error fetching diamonds: \(error.localizedDescription)")
+                    return
+                }
+
+                if let data = document?.data(), let userDiamonds = data["diamonds"] as? Int {
+                    self.diamonds = userDiamonds
+                }
+            }
         }
-        .onAppear {
-            loadExcludedUsersAndFetchUsers()
-        }
-    }
 
     private func loadExcludedUsersAndFetchUsers() {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
@@ -157,8 +183,21 @@ struct HomePageView: View {
 
     private func approveUser() {
         guard !users.isEmpty else { return }
+        guard diamonds >= 10 else { return } // Ensure the user has enough diamonds
         let approvedUser = users.removeLast()
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
+
+        // Deduct 10 diamonds in the state immediately
+        diamonds -= 10
+
+        // Update Firestore asynchronously
+        Firestore.firestore().collection("users").document(currentUserID).updateData([
+            "diamonds": diamonds
+        ]) { error in
+            if let error = error {
+                print("Error deducting diamonds: \(error.localizedDescription)")
+            }
+        }
 
         Firestore.firestore().collection("users").document(approvedUser.id).updateData([
             "likes": FieldValue.arrayUnion([currentUserID])
@@ -170,6 +209,8 @@ struct HomePageView: View {
 
         updateExcludedUsers(approvedUser.id)
     }
+
+
 
     private func updateExcludedUsers(_ userID: String) {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
