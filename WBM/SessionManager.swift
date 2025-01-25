@@ -24,33 +24,59 @@ class SessionManager: ObservableObject {
     @Published var isLoading: Bool = true // Add loading state
 
     func checkAuthState() {
-        isLoading = true // Set loading to true while checking authentication state
+        isLoading = true // Start loading
         if let user = Auth.auth().currentUser {
-            // Check if the user exists in the Firestore database
             let userRef = Firestore.firestore().collection("users").document(user.uid)
             userRef.getDocument { document, error in
                 if let error = error {
                     print("Error fetching user document: \(error.localizedDescription)")
-                    self.isLoading = false
                     self.isSignedIn = false
+                    self.isFirstTimeUser = false
+                    self.isLoading = false
                     return
                 }
 
                 if let document = document, document.exists {
+                    print("Existing user found.")
                     self.isFirstTimeUser = false
                     self.isSignedIn = true
+                    self.isLoading = false // End loading
                 } else {
-                    self.isFirstTimeUser = true
-                    self.isSignedIn = true // Set to true to proceed to onboarding
+                    print("First-time user detected. Creating document...")
+                    // Create user document
+                    userRef.setData([
+                        "spotlightsRemaining": 1,
+                        "diamonds": 100,
+                        "name": "",
+                        "bio": "",
+                        "height": "66",
+                        "weight": "150",
+                        "gender": "",
+                        "relationshipGoal": "",
+                        "languages": [],
+                        "profileImageURLs": []
+                    ]) { error in
+                        if let error = error {
+                            print("Error creating user document: \(error.localizedDescription)")
+                            self.isFirstTimeUser = false
+                        } else {
+                            print("User document created successfully.")
+                            self.isFirstTimeUser = true
+                        }
+                        self.isSignedIn = true
+                        self.isLoading = false // End loading after document creation
+                    }
                 }
-                self.isLoading = false // Stop loading after the check
             }
         } else {
+            print("No user signed in.")
             isSignedIn = false
             isFirstTimeUser = false
-            isLoading = false // Stop loading if no user is signed in
+            isLoading = false
         }
     }
+
+
 
 
     func signOut() {

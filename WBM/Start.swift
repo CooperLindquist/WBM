@@ -1,30 +1,26 @@
-//
-//  Start.swift
-//  WBM
-//
-//  Created by Cooper Lindquist on 1/3/25.
-//
-
 import SwiftUI
 import Firebase
 import GoogleSignIn
 import FirebaseAuth
 
 struct Start: View {
-    @EnvironmentObject var sessionManager: SessionManager
+    @State private var navigationState: NavigationState = .none  // Navigation state
     @Environment(\.colorScheme) var colorScheme
+
+    enum NavigationState {
+        case none
+        case onboarding
+        case tabBar
+    }
 
     var body: some View {
         Group {
-            if sessionManager.isLoading {
-                LoadingView()  // Show loading view while checking auth state
-            } else if sessionManager.isSignedIn {
-                if sessionManager.isFirstTimeUser {
-                    OnboardingView()
-                } else {
-                    TabBarView()
-                }
-            } else {
+            switch navigationState {
+            case .tabBar:
+                TabBarView()  // Navigate to TabBarView
+            case .onboarding:
+                OnboardingView()  // Navigate to OnboardingView
+            case .none:
                 ZStack {
                     // Gradient background
                     LinearGradient(
@@ -33,23 +29,21 @@ struct Start: View {
                         endPoint: .bottom
                     )
                     .edgesIgnoringSafeArea(.all)
-
+                    
                     VStack(spacing: 20) {
-                        // WBM Logo
                         Image("WBM_resized")
                             .resizable()
                             .scaledToFit()
                             .frame(width: 200, height: 200)
                             .shadow(radius: 10)
-
+                        
                         Text("Welcome to WBM")
                             .font(.largeTitle.bold())
                             .foregroundColor(.white)
                             .padding(.top, 20)
-
+                        
                         Spacer()
-
-                        // Google Sign-In Button
+                        
                         Button(action: {
                             signInWithGoogle()
                         }) {
@@ -74,9 +68,9 @@ struct Start: View {
                             .shadow(radius: 5)
                         }
                         .padding(.horizontal, 40)
-
+                        
                         Spacer()
-
+                        
                         Text("Weight-Based Matchmaking")
                             .font(.footnote)
                             .foregroundColor(.white.opacity(0.7))
@@ -86,29 +80,6 @@ struct Start: View {
                 }
             }
         }
-        .onAppear {
-            checkAuthState()
-        }
-    }
-
-    private func checkAuthState() {
-        sessionManager.isLoading = true  // Show loading state
-        if let user = Auth.auth().currentUser {
-            let userRef = Firestore.firestore().collection("users").document(user.uid)
-            userRef.getDocument { document, error in
-                if let document = document, document.exists {
-                    sessionManager.isFirstTimeUser = false
-                    sessionManager.isSignedIn = true
-                } else {
-                    sessionManager.isFirstTimeUser = true
-                    sessionManager.isSignedIn = true  // Still signed in, but first time user
-                }
-                sessionManager.isLoading = false  // Stop loading after the check
-            }
-        } else {
-            sessionManager.isSignedIn = false
-            sessionManager.isLoading = false  // Stop loading if no user is signed in
-        }
     }
 
     private func getRootViewController() -> UIViewController? {
@@ -117,42 +88,56 @@ struct Start: View {
         }
         return windowScene.windows.first?.rootViewController
     }
-
+    
     private func signInWithGoogle() {
         guard let rootViewController = getRootViewController() else {
             print("Unable to access root view controller")
             return
         }
-
+        
         GIDSignIn.sharedInstance.signIn(withPresenting: rootViewController) { signInResult, error in
             if let error = error {
                 print("Google Sign-In error: \(error.localizedDescription)")
                 return
             }
-
+            
             guard let user = signInResult?.user,
                   let idToken = user.idToken?.tokenString else {
                 print("Error retrieving Google Sign-In user data")
                 return
             }
-
+            
             let credential = GoogleAuthProvider.credential(withIDToken: idToken,
-                                                            accessToken: user.accessToken.tokenString)
+                                                           accessToken: user.accessToken.tokenString)
             Auth.auth().signIn(with: credential) { authResult, error in
                 if let error = error {
                     print("Firebase Sign-In error: \(error.localizedDescription)")
                     return
                 }
-
-                print("User signed in: \(authResult?.user.displayName ?? "Unknown")")
-                sessionManager.isSignedIn = true
+                
+                guard let uid = authResult?.user.uid else { return }
+                checkOnboardingStatus(for: uid)
+            }
+        }
+    }
+    
+    private func checkOnboardingStatus(for userId: String) {
+        let db = Firestore.firestore()
+        let userDoc = db.collection("users").document(userId)
+        
+        userDoc.getDocument { document, error in
+            if let document = document, document.exists {
+                let isOnboarded = document.get("isOnboarded") as? Bool ?? false
+                navigationState = isOnboarded ? .tabBar : .onboarding
+            } else {
+                // Document doesn't exist; assume new user
+                navigationState = .onboarding
+                userDoc.setData(["isOnboarded": false], merge: true)  // Initialize user record
             }
         }
     }
 }
 
-
 #Preview {
     Start()
-        .environmentObject(SessionManager())
 }

@@ -16,6 +16,7 @@
 		DB1F779D2D35B97700DD6378 /* RateUserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB1F779C2D35B97700DD6378 /* RateUserView.swift */; };
 		DB1F77A32D39F64100DD6378 /* ImageCropperView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB1F77A22D39F64100DD6378 /* ImageCropperView.swift */; };
 		DB1F77A52D3C8DAD00DD6378 /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB1F77A42D3C8DAD00DD6378 /* LocationManager.swift */; };
+		DB1F77A82D445CB600DD6378 /* EditProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB1F77A72D445CB600DD6378 /* EditProfileView.swift */; };
 		DB82876C2D2868F000A3795D /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB82876B2D2868F000A3795D /* OnboardingView.swift */; };
 		DB82876E2D28711100A3795D /* LanguageList.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB82876D2D28711100A3795D /* LanguageList.swift */; };
 		DB8287712D2876ED00A3795D /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = DB8287702D2876ED00A3795D /* FirebaseStorage */; };
@@ -54,6 +55,7 @@
 		DB1F779C2D35B97700DD6378 /* RateUserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RateUserView.swift; sourceTree = "<group>"; };
 		DB1F77A22D39F64100DD6378 /* ImageCropperView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCropperView.swift; sourceTree = "<group>"; };
 		DB1F77A42D3C8DAD00DD6378 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
+		DB1F77A72D445CB600DD6378 /* EditProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditProfileView.swift; sourceTree = "<group>"; };
 		DB82876B2D2868F000A3795D /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		DB82876D2D28711100A3795D /* LanguageList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageList.swift; sourceTree = "<group>"; };
 		DB8287722D28775100A3795D /* ImagePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePicker.swift; sourceTree = "<group>"; };
@@ -140,6 +142,7 @@
 				DB1F77A22D39F64100DD6378 /* ImageCropperView.swift */,
 				DBB4E97D2D28560900C44E47 /* Start.swift */,
 				DB82876B2D2868F000A3795D /* OnboardingView.swift */,
+				DB1F77A72D445CB600DD6378 /* EditProfileView.swift */,
 				DB82876D2D28711100A3795D /* LanguageList.swift */,
 				DBB4E9582D28508300C44E47 /* ContentView.swift */,
 				DBB4E9892D285EDD00C44E47 /* SessionManager.swift */,
@@ -267,6 +270,7 @@
 				DBB4E9822D285C8300C44E47 /* ProfileView.swift in Sources */,
 				DBB4E9842D285D5300C44E47 /* HomePageView.swift in Sources */,
 				DB82876C2D2868F000A3795D /* OnboardingView.swift in Sources */,
+				DB1F77A82D445CB600DD6378 /* EditProfileView.swift in Sources */,
 				DB1F77A32D39F64100DD6378 /* ImageCropperView.swift in Sources */,
 				DBB4E9732D2851D900C44E47 /* User.swift in Sources */,
 				DBB4E98A2D285EDD00C44E47 /* SessionManager.swift in Sources */,

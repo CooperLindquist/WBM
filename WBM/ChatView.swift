@@ -1,10 +1,3 @@
-//
-//  ChatView.swift
-//  WBM
-//
-//  Created by Cooper Lindquist on 1/5/25.
-//
-
 import SwiftUI
 import Firebase
 import FirebaseAuth
@@ -15,7 +8,8 @@ struct ChatView: View {
     @State private var newMessage: String = ""
     @State private var listener: ListenerRegistration? = nil
     @State private var showingRateUserView = false
-
+    @State private var isTyping: Bool = false
+    @State private var typingText: String = ""
 
     var body: some View {
         ZStack {
@@ -48,6 +42,20 @@ struct ChatView: View {
                                         .shadow(color: Color.gray.opacity(0.5), radius: 3)
                                     Spacer()
                                 }
+                            }
+                        }
+
+                        // Typing Indicator
+                        if isTyping {
+                            HStack {
+                                Spacer()
+                                Text(typingText)
+                                    .padding()
+                                    .background(Color.white.opacity(0.8))
+                                    .cornerRadius(15)
+                                    .foregroundColor(.black)
+                                    .shadow(color: Color.gray.opacity(0.5), radius: 3)
+                                Spacer()
                             }
                         }
                     }
@@ -92,9 +100,61 @@ struct ChatView: View {
         .onDisappear {
             listener?.remove()
         }
+        .onChange(of: newMessage) { _ in
+            updateTypingStatus(isTyping: true) // Update typing status when the user types
+        }
+        .onChange(of: isTyping) { _ in
+            listenForTyping()
+        }
     }
 
+    private func updateTypingStatus(isTyping: Bool) {
+        guard let currentUserID = Auth.auth().currentUser?.uid else { return }
+        let chatID = generateChatID(user1: currentUserID, user2: chatPartner.id)
 
+        Firestore.firestore().collection("chats").document(chatID).setData([
+            "typing": isTyping ? currentUserID : "" // Set the current user's ID or empty if not typing
+        ], merge: true)
+    }
+
+    private func listenForTyping() {
+        let chatID = generateChatID(user1: Auth.auth().currentUser!.uid, user2: chatPartner.id)
+
+        Firestore.firestore().collection("chats").document(chatID).addSnapshotListener { snapshot, error in
+            if let error = error {
+                print("🔥 Error fetching typing status: \(error.localizedDescription)")
+                return
+            }
+
+            if let data = snapshot?.data(), let typingUserID = data["typing"] as? String {
+                if typingUserID == chatPartner.id {
+                    withAnimation {
+                        isTyping = true
+                        startTypingAnimation()
+                    }
+                } else {
+                    withAnimation {
+                        isTyping = false
+                        typingText = "" // Reset typing text
+                    }
+                }
+            }
+        }
+    }
+
+    private func startTypingAnimation() {
+        let typingMessages = ["", ".", "..", "..."]
+        var counter = 0
+        Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { timer in
+            if isTyping {
+                typingText = typingMessages[counter % 4]
+                counter += 1
+            } else {
+                timer.invalidate()
+                typingText = "" // Reset when stopped typing
+            }
+        }
+    }
 
     private func fetchMessages() {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }

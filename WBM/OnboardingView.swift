@@ -5,6 +5,7 @@ import FirebaseAuth
 import Cloudinary
 
 struct OnboardingView: View {
+    @State private var navigateToTabBarView: Bool = false
     @State private var profileDataUpdated: Bool = false
     @State private var uploadingImageIndices: Set<Int> = []
     @State private var uploadsInProgress: Int = 0
@@ -21,30 +22,44 @@ struct OnboardingView: View {
     @State private var selectedImages: [UIImage] = []
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var isShowingLanguageList = false
-    @Environment(\.dismiss) var dismiss
-
+    
     private let relationshipGoals = ["Short-term", "Long-term", "Friends", "Marriage"]
     private let cloudinary = CLDCloudinary(configuration: CLDConfiguration(cloudName: "dfxodj9gk", apiKey: "998259646284382"))
-
+    
     var body: some View {
         ZStack {
-            LinearGradient(gradient: Gradient(colors: [Color.pink.opacity(0.5), Color.blue.opacity(0.7)]), startPoint: .top, endPoint: .bottom)
-                .edgesIgnoringSafeArea(.all)
-
-            ScrollView {
-                VStack(spacing: 30) {
-                    HeaderView
-
-                    PersonalInfoSection
-                    PhysicalAttributesSection
-                    GenderSection
-                    RelationshipGoalSection
-                    LanguageSelectionSection
-                    ProfilePicturesSection
-
-                    SaveButton
+            if navigateToTabBarView {
+                TabBarView()
+                    .transition(.opacity) // Add a smooth transition if desired
+            } else {
+                onboardingContent
+                    .transition(.opacity) // Add the same transition here for consistency
+            }
+        }
+        .animation(.easeInOut, value: navigateToTabBarView) // Animate the transition
+    }
+    
+    private var onboardingContent: some View {
+        NavigationStack {
+            ZStack {
+                LinearGradient(gradient: Gradient(colors: [Color.pink.opacity(0.5), Color.blue.opacity(0.7)]), startPoint: .top, endPoint: .bottom)
+                    .edgesIgnoringSafeArea(.all)
+                
+                ScrollView {
+                    VStack(spacing: 30) {
+                        HeaderView
+                        
+                        PersonalInfoSection
+                        PhysicalAttributesSection
+                        GenderSection
+                        RelationshipGoalSection
+                        LanguageSelectionSection
+                        ProfilePicturesSection
+                        
+                        SaveButton
+                    }
+                    .padding()
                 }
-                .padding()
             }
         }
         .onAppear(perform: loadInitialData)
@@ -52,37 +67,37 @@ struct OnboardingView: View {
             loadImages(from: newItems)
         }
         .sheet(isPresented: $isShowingLanguageList) {
-            // Assuming LanguageList is defined elsewhere
             LanguageList(selectedLanguages: $selectedLanguages)
         }
     }
-
+    
+    
     private var HeaderView: some View {
         VStack {
             Text("Welcome!")
                 .font(.largeTitle)
                 .fontWeight(.bold)
                 .foregroundColor(.white)
-
+            
             Text("Complete your profile to get started.")
                 .foregroundColor(.white)
                 .font(.subheadline)
         }
         .padding(.top, 40)
     }
-
+    
     private var PersonalInfoSection: some View {
         SectionView(title: "Personal Info") {
             VStack(spacing: 15) {
                 TextField("Name", text: $name)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
-
+                
                 TextField("Bio", text: $bio)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
             }
         }
     }
-
+    
     private var PhysicalAttributesSection: some View {
         SectionView(title: "Physical Attributes") {
             VStack(spacing: 20) {
@@ -93,7 +108,7 @@ struct OnboardingView: View {
                         set: { height = Int($0) }
                     ), in: 36...96, step: 1)
                 }
-
+                
                 VStack(alignment: .leading) {
                     Text("Weight: \(Int(weight)) lbs")
                     Slider(value: $weight, in: 50...400, step: 1)
@@ -101,7 +116,7 @@ struct OnboardingView: View {
             }
         }
     }
-
+    
     private var GenderSection: some View {
         SectionView(title: "Gender") {
             Picker("Gender", selection: $gender) {
@@ -112,7 +127,7 @@ struct OnboardingView: View {
             .pickerStyle(SegmentedPickerStyle())
         }
     }
-
+    
     private var RelationshipGoalSection: some View {
         SectionView(title: "Relationship Goal") {
             VStack(alignment: .leading, spacing: 15) {
@@ -132,8 +147,8 @@ struct OnboardingView: View {
             }
         }
     }
-
-
+    
+    
     private var LanguageSelectionSection: some View {
         SectionView(title: "Languages") {
             Button("Select Languages") {
@@ -142,7 +157,7 @@ struct OnboardingView: View {
             .buttonStyle(FilledButtonStyle())
         }
     }
-
+    
     private var ProfilePicturesSection: some View {
         SectionView(title: "Profile Pictures") {
             VStack {
@@ -157,7 +172,7 @@ struct OnboardingView: View {
                                         .scaledToFill()
                                         .frame(width: 100, height: 100)
                                         .clipShape(RoundedRectangle(cornerRadius: 10))
-
+                                    
                                     // Loading indicator if the image is still uploading
                                     if uploadingImageIndices.contains(index) {
                                         Color.black.opacity(0.5)
@@ -166,7 +181,7 @@ struct OnboardingView: View {
                                             .scaleEffect(2)
                                     }
                                 }
-
+                                
                                 // Trash button
                                 Button(action: {
                                     removeProfilePicture(at: index)
@@ -176,7 +191,7 @@ struct OnboardingView: View {
                                 }
                             }
                         }
-
+                        
                         PhotosPicker(
                             selection: $photoItems,
                             maxSelectionCount: 6 - selectedImages.count,
@@ -196,8 +211,8 @@ struct OnboardingView: View {
             }
         }
     }
-
-
+    
+    
     private var SaveButton: some View {
         Button(action: saveProfileData) {
             Text("Save")
@@ -208,35 +223,36 @@ struct OnboardingView: View {
                 .background(isUploadingImages ? Color.gray : Color.blue)
                 .cornerRadius(10)
         }
-        .disabled(isUploadingImages)  // Disable if images are still uploading
+        .disabled(isUploadingImages) // Disable if images are still uploading
     }
-
-
-
+    
+    
+    
+    
     private func SectionView<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 15) {
             Text(title)
                 .font(.headline)
                 .foregroundColor(.white)
-
+            
             content()
                 .padding()
                 .background(Color.white.opacity(0.8))
                 .cornerRadius(15)
         }
     }
-
+    
     private func removeProfilePicture(at index: Int) {
         guard index < selectedImages.count, index < profileImageURLs.count else { return }
-
+        
         let removedImage = selectedImages.remove(at: index)
         let imageUrl = profileImageURLs.remove(at: index) // Remove URL from the array
-
+        
         removeImageUrlFromFirestore(imageUrl: imageUrl) // Remove from Firestore
     }
-
-
-
+    
+    
+    
     private func removeImageUrlFromFirestore(imageUrl: String) {
         guard let user = Auth.auth().currentUser else {
             print("No authenticated user found")
@@ -255,11 +271,11 @@ struct OnboardingView: View {
                 print("❌ Document does not exist")
                 return
             }
-
+            
             // Confirm the profileImageURLs field exists and is an array
             if let imageUrls = document.data()?["profileImageURLs"] as? [String] {
                 print("Existing profileImageURLs: \(imageUrls)")
-
+                
                 // Proceed to remove the image URL from the array
                 userDoc.updateData([
                     "profileImageURLs": FieldValue.arrayRemove([imageUrl])
@@ -275,18 +291,18 @@ struct OnboardingView: View {
             }
         }
     }
-
- 
+    
+    
     
     private func loadImages(from items: [PhotosPickerItem]) {
         isUploadingImages = true
         uploadsInProgress = items.count
-
+        
         for (index, item) in items.enumerated() {
             guard selectedImages.count < 6 else { return }
-
+            
             uploadingImageIndices.insert(index) // Mark the image as uploading
-
+            
             item.loadTransferable(type: Data.self) { result in
                 switch result {
                 case .success(let data):
@@ -304,10 +320,10 @@ struct OnboardingView: View {
             }
         }
     }
-
+    
     private func uploadImageToCloudinary(imageData: Data, atIndex index: Int) {
         let params = CLDUploadRequestParams().setUploadPreset("profile pics")
-
+        
         cloudinary.createUploader().upload(data: imageData, uploadPreset: "profile pics", params: params, completionHandler: { result, error in
             if let error = error {
                 print("Error uploading to Cloudinary: \(error.localizedDescription)")
@@ -316,27 +332,27 @@ struct OnboardingView: View {
                     saveImageUrlToFirestore(url: secureUrl)
                 }
             }
-
+            
             // Decrement the number of uploads in progress
             uploadsInProgress -= 1
             uploadingImageIndices.remove(index) // Mark the image as uploaded
-
+            
             // Once all uploads are complete, set isUploadingImages to false
             if uploadsInProgress == 0 {
                 isUploadingImages = false
             }
         })
     }
-
-
+    
+    
     private func cropImageToVerticalRectangle(_ image: UIImage, aspectRatio: CGFloat = 2.0 / 4.0) -> UIImage? {
         let originalWidth = image.size.width
         let originalHeight = image.size.height
         let originalAspectRatio = originalWidth / originalHeight
-
+        
         var cropWidth = originalWidth
         var cropHeight = originalHeight
-
+        
         if originalAspectRatio > aspectRatio {
             // Crop horizontally to match aspect ratio
             cropWidth = originalHeight * aspectRatio
@@ -344,25 +360,25 @@ struct OnboardingView: View {
             // Crop vertically to match aspect ratio
             cropHeight = originalWidth / aspectRatio
         }
-
+        
         let xOffset = (originalWidth - cropWidth) / 2
         let yOffset = (originalHeight - cropHeight) / 2
         let cropRect = CGRect(x: xOffset, y: yOffset, width: cropWidth, height: cropHeight)
-
+        
         guard let cgImage = image.cgImage?.cropping(to: cropRect) else { return nil }
-
+        
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: cropWidth, height: cropHeight))
         return renderer.image { _ in
             UIImage(cgImage: cgImage).draw(in: CGRect(origin: .zero, size: CGSize(width: cropWidth, height: cropHeight)))
         }
     }
-
-
-
+    
+    
+    
     private func saveImageUrlToFirestore(url: String) {
         guard let user = Auth.auth().currentUser else { return }
         let userDoc = Firestore.firestore().collection("users").document(user.uid)
-
+        
         userDoc.updateData([
             "profileImageURLs": FieldValue.arrayUnion([url])
         ]) { error in
@@ -373,16 +389,16 @@ struct OnboardingView: View {
             }
         }
     }
-
+    
     private func loadInitialData() {
         guard let user = Auth.auth().currentUser else { return }
-
+        
         Firestore.firestore().collection("users").document(user.uid).getDocument { document, error in
             if let error = error {
                 print("Error fetching initial data: \(error.localizedDescription)")
                 return
             }
-
+            
             if let document = document, document.exists {
                 let data = document.data() ?? [:]
                 name = data["name"] as? String ?? ""
@@ -392,14 +408,14 @@ struct OnboardingView: View {
                 gender = data["gender"] as? String ?? ""
                 relationshipGoal = data["relationshipGoal"] as? String ?? ""
                 selectedLanguages = data["languages"] as? [String] ?? []
-
+                
                 if let imageURLs = data["profileImageURLs"] as? [String] {
                     fetchImages(from: imageURLs)
                 }
             }
         }
     }
-
+    
     private func fetchImages(from imageURLs: [String]) {
         for urlString in imageURLs {
             if let url = URL(string: urlString) {
@@ -408,7 +424,7 @@ struct OnboardingView: View {
                         print("Error fetching image: \(error.localizedDescription)")
                         return
                     }
-
+                    
                     if let data = data, let uiImage = UIImage(data: data) {
                         DispatchQueue.main.async {
                             selectedImages.append(uiImage)
@@ -418,7 +434,7 @@ struct OnboardingView: View {
             }
         }
     }
-
+    
     private func saveProfileData() {
         guard let user = Auth.auth().currentUser else { return }
         let updatedData: [String: Any] = [
@@ -430,32 +446,42 @@ struct OnboardingView: View {
             "relationshipGoal": relationshipGoal,
             "languages": selectedLanguages
         ]
+        
         Firestore.firestore().collection("users").document(user.uid).setData(updatedData, merge: true) { error in
             if let error = error {
                 print("Error saving profile data: \(error.localizedDescription)")
             } else {
                 print("Successfully saved profile data.")
-                // Set the profile data updated flag to true
-                profileDataUpdated = true
-                loadInitialData() // Reload profile data
-                dismiss() // Dismiss the onboarding view
+                completeOnboarding(for: user.uid)
             }
         }
     }
-
-
+    
+    private func completeOnboarding(for userId: String) {
+        let db = Firestore.firestore()
+        let userDoc = db.collection("users").document(userId)
+        
+        userDoc.updateData(["isOnboarded": true]) { error in
+            if let error = error {
+                print("Error updating onboarding status: \(error.localizedDescription)")
+            } else {
+                print("Onboarding completed for user \(userId).")
+                navigateToTabBarView = true // Trigger navigation
+            }
+        }
+    }
 }
 extension UIImage {
     func normalizedImage() -> UIImage {
         if imageOrientation == .up {
             return self // No adjustment needed
         }
-
+        
         UIGraphicsBeginImageContextWithOptions(size, false, scale)
         draw(in: CGRect(origin: .zero, size: size))
         let normalizedImage = UIGraphicsGetImageFromCurrentImageContext()
         UIGraphicsEndImageContext()
-
+        
         return normalizedImage ?? self
     }
 }

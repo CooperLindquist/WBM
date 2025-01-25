@@ -131,7 +131,7 @@ struct ProfileView: View {
                         }
                         .padding(.horizontal, 16)
                         .fullScreenCover(isPresented: $showingOnboarding) {
-                            OnboardingView(initialProfileData: userData)
+                            EditProfileView(initialProfileData: userData)
                         }
                         
                         
