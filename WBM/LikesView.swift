@@ -4,6 +4,7 @@ import SDWebImageSwiftUI
 import FirebaseAuth
 
 struct LikesView: View {
+    @Binding var likesCount: Int
     @State private var likedUsers: [User] = []
     @State private var selectedUser: User? = nil
     @State private var isLoading = true
@@ -149,9 +150,11 @@ struct LikesView: View {
                   let likedUserIDs = data["likes"] as? [String],
                   !likedUserIDs.isEmpty else {
                 likedUsers = []
+                likesCount = 0
                 isLoading = false
                 return
             }
+            likesCount = likedUserIDs.count
 
             Firestore.firestore().collection("users").whereField(FieldPath.documentID(), in: likedUserIDs).getDocuments { snapshot, error in
                 if let error = error {
@@ -255,7 +258,4 @@ struct LikesView: View {
 
 }
 
-// SwiftUI Preview
-#Preview {
-    LikesView()
-}
+

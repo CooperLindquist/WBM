@@ -7,9 +7,13 @@
 
 
 import SwiftUI
+import Firebase
+import FirebaseAuth
+
 
 struct TabBarView: View {
     @State private var selectedTab: String = "house"
+    @State private var likesCount: Int = 0 // State for the likes count
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,16 +22,6 @@ struct TabBarView: View {
                 selectedScreen
                     .navigationBarTitleDisplayMode(.inline)
                     .navigationBarHidden(true)
-                    .toolbar {
-                        // Add a sample toolbar item, can be customized based on need
-                        ToolbarItem(placement: .navigationBarLeading) {
-                            Button(action: {
-                                print("Toolbar button tapped!")
-                            }) {
-                                Image(systemName: "gearshape")
-                            }
-                        }
-                    }
             }
             .navigationViewStyle(StackNavigationViewStyle())
 
@@ -42,7 +36,7 @@ struct TabBarView: View {
                     Spacer()
                     tabButton(tab: "tag", imageName: "tag", filledImageName: "tag.fill")
                     Spacer()
-                    tabButton(tab: "heart", imageName: "heart", filledImageName: "heart.fill")
+                    tabButton(tab: "heart", imageName: "heart", filledImageName: "heart.fill", count: likesCount)
                     Spacer()
                     tabButton(tab: "bubble", imageName: "text.bubble", filledImageName: "text.bubble.fill")
                     Spacer()
@@ -52,18 +46,31 @@ struct TabBarView: View {
             }
         }
         .edgesIgnoringSafeArea(.bottom)
+        .onAppear(perform: fetchLikesCount) // Fetch likes count when TabBarView appears
     }
 
     // Tab button component
-    private func tabButton(tab: String, imageName: String, filledImageName: String) -> some View {
+    private func tabButton(tab: String, imageName: String, filledImageName: String, count: Int = 0) -> some View {
         Button(action: {
             selectedTab = tab
         }) {
-            Image(systemName: selectedTab == tab ? filledImageName : imageName)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 30, height: 30)
-                .foregroundColor(selectedTab == tab ? .blue : .gray)
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: selectedTab == tab ? filledImageName : imageName)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 30, height: 30)
+                    .foregroundColor(selectedTab == tab ? .blue : .gray)
+
+                if count > 0 && tab == "heart" {
+                    Text("\(count)")
+                        .font(.caption)
+                        .foregroundColor(.white)
+                        .padding(6)
+                        .background(Color.red)
+                        .clipShape(Circle())
+                        .offset(x: 10, y: -10)
+                }
+            }
         }
     }
 
@@ -76,7 +83,7 @@ struct TabBarView: View {
         case "tag":
             SpotlightView()
         case "heart":
-            LikesView()
+            LikesView(likesCount: $likesCount) // Pass likes count binding
         case "bubble":
             MessagesView()
         case "profile":
@@ -85,7 +92,29 @@ struct TabBarView: View {
             HomePageView()
         }
     }
+
+    // Fetch the likes count
+    private func fetchLikesCount() {
+        guard let currentUserID = Auth.auth().currentUser?.uid else { return }
+
+        Firestore.firestore().collection("users").document(currentUserID).getDocument { document, error in
+            if let error = error {
+                print("Error fetching likes: \(error.localizedDescription)")
+                return
+            }
+
+            guard let data = document?.data(),
+                  let likedUserIDs = data["likes"] as? [String] else {
+                likesCount = 0
+                return
+            }
+
+            likesCount = likedUserIDs.count
+        }
+    }
 }
+
+
 
 struct TabBarView_Preview: PreviewProvider {
     static var previews: some View {

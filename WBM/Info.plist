@@ -46,5 +46,9 @@
     <!-- Add location permission description -->
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>We need your location to filter nearby profiles.</string>
+    
+    <!-- Google AdMob App ID -->
+    <key>GADApplicationIdentifier</key>
+    <string>ca-app-pub-8541374212497648~2126967909</string>
 </dict>
 </plist>

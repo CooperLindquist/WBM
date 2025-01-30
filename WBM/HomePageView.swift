@@ -10,66 +10,70 @@ struct HomePageView: View {
     @State private var showFilterSheet = false
     @State private var filters: Filters = Filters.loadFilters()
     @State private var diamonds: Int = 0
+    @State private var showDiamondStore = false // State to show diamond store
 
     var body: some View {
-            ZStack {
-                // Background Gradient
-                LinearGradient(
-                    gradient: Gradient(colors: [Color.pink.opacity(0.5), Color.blue.opacity(0.7)]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .edgesIgnoringSafeArea(.all)
+        ZStack {
+            // Background Gradient
+            LinearGradient(
+                gradient: Gradient(colors: [Color.pink.opacity(0.5), Color.blue.opacity(0.7)]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .edgesIgnoringSafeArea(.all)
 
-                if isLoading {
-                    ProgressView("Loading Users...")
-                        .progressViewStyle(CircularProgressViewStyle())
-                } else if users.isEmpty {
-                    Text("No more users available!")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                } else {
-                    VStack {
-                        Spacer()
-                        if let currentUser = users.last {
-                            UserCardView(
-                                user: currentUser,
-                                onSkip: skipUser,
-                                onApprove: approveUser
-                            )
-                            .frame(maxWidth: UIScreen.main.bounds.width * 0.9) // Adjust width to 90% of the screen
-                            .aspectRatio(2/4, contentMode: .fit) // Keep the desired height
-                            .cornerRadius(25)
-                            .shadow(radius: 15)
-                            .padding(.horizontal, 15) // Add extra padding for narrower look
-                            .padding(.top, 20)
-                        }
-                        Spacer()
-
-                        // Action Buttons
-                        HStack(spacing: 30) {
-                            Button(action: { skipUser() }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 70))
-                                    .foregroundColor(.red)
-                            }
-
-                            Button(action: { approveUser() }) {
-                                Image(systemName: "heart.circle.fill")
-                                    .font(.system(size: 70))
-                                    .foregroundColor(.green)
-                            }
-                        }
-                        .padding(.bottom, 20)
-                    }
-                }
-
-                // Top Bar with Diamonds and Filter Button
+            if isLoading {
+                ProgressView("Loading Users...")
+                    .progressViewStyle(CircularProgressViewStyle())
+            } else if users.isEmpty {
+                Text("No more users available!")
+                    .font(.headline)
+                    .foregroundColor(.white)
+            } else {
                 VStack {
-                    HStack {
-                        Spacer()
-                        
-                        // Diamonds Display
+                    Spacer()
+                    if let currentUser = users.last {
+                        UserCardView(
+                            user: currentUser,
+                            onSkip: skipUser,
+                            onApprove: approveUser
+                        )
+                        .frame(maxWidth: UIScreen.main.bounds.width * 0.9)
+                        .aspectRatio(2 / 4, contentMode: .fit)
+                        .cornerRadius(25)
+                        .shadow(radius: 15)
+                        .padding(.horizontal, 15)
+                        .padding(.top, 20)
+                    }
+                    Spacer()
+
+                    // Action Buttons
+                    HStack(spacing: 30) {
+                        Button(action: { skipUser() }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 70))
+                                .foregroundColor(.red)
+                        }
+
+                        Button(action: { approveUser() }) {
+                            Image(systemName: "heart.circle.fill")
+                                .font(.system(size: 70))
+                                .foregroundColor(.green)
+                        }
+                    }
+                    .padding(.bottom, 20)
+                }
+            }
+
+            // Top Bar with Diamonds and Filter Button
+            VStack {
+                HStack {
+                    Spacer()
+                    
+                    // Diamonds Display
+                    Button(action: {
+                        showDiamondStore = true // Show the diamond store
+                    }) {
                         HStack {
                             Image(systemName: "diamond.fill")
                                 .foregroundColor(.yellow)
@@ -79,33 +83,40 @@ struct HomePageView: View {
                                 .fontWeight(.bold)
                                 .font(.title2)
                         }
-                        .padding(.trailing, 10)
-
-                        // Filter Button
-                        Button(action: {
-                            showFilterSheet = true
-                        }) {
-                            Image(systemName: "line.horizontal.3.decrease.circle.fill")
-                                .font(.system(size: 40))
-                                .foregroundColor(.white)
-                                .padding(10)
-                                .background(Color.black.opacity(0.6))
-                                .clipShape(Circle())
-                                .shadow(radius: 5)
-                        }
-                        .padding()
                     }
-                    Spacer()
+                    .padding(.trailing, 10)
+
+                    // Filter Button
+                    Button(action: {
+                        showFilterSheet = true
+                    }) {
+                        Image(systemName: "line.horizontal.3.decrease.circle.fill")
+                            .font(.system(size: 40))
+                            .foregroundColor(.white)
+                            .padding(10)
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Circle())
+                            .shadow(radius: 5)
+                    }
+                    .padding()
                 }
+                Spacer()
             }
-            .sheet(isPresented: $showFilterSheet) {
-                FilterSheet(filters: $filters, applyFilters: applyFilters)
-            }
-            .onAppear {
-                loadExcludedUsersAndFetchUsers()
-                fetchDiamonds() // Fetch the diamond count
-            }
+            .offset(x: -5, y: 20)
         }
+        .sheet(isPresented: $showFilterSheet) {
+            FilterSheet(filters: $filters, applyFilters: applyFilters)
+        }
+        .sheet(isPresented: $showDiamondStore) {
+            DiamondStoreView() 
+        }
+        .onAppear {
+            loadExcludedUsersAndFetchUsers()
+            fetchDiamonds()
+        }
+    }
+
+
     private func fetchDiamonds() {
             guard let currentUserID = Auth.auth().currentUser?.uid else { return }
             let userDoc = Firestore.firestore().collection("users").document(currentUserID)

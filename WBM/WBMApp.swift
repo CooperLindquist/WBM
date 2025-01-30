@@ -7,11 +7,20 @@
 
 import SwiftUI
 import FirebaseCore
+import GoogleMobileAds // Import Google Mobile Ads SDK
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        // Configure Firebase
         FirebaseApp.configure()
+        
+        // Configure Google Mobile Ads SDK
+        GADMobileAds.sharedInstance().start(completionHandler: nil)
+        
+        // Set test device identifiers
+        GADMobileAds.sharedInstance().requestConfiguration.testDeviceIdentifiers = ["6ce3cb3e6c9dfdf63940ebc12abb9ea5"]
+        
         return true
     }
 }
