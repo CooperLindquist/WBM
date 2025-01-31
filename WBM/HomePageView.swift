@@ -481,6 +481,7 @@ struct User: Identifiable, Hashable {
     let languages: [String]?
     let relationshipGoal: String?
     let imageURLs: [String]
+    let premium: Bool  
 
     init?(id: String, data: [String: Any]) {
         guard let name = data["name"] as? String,
@@ -495,8 +496,10 @@ struct User: Identifiable, Hashable {
         self.languages = data["languages"] as? [String]
         self.relationshipGoal = data["relationshipGoal"] as? String
         self.imageURLs = imageURLs
+        self.premium = data["premium"] as? Bool ?? false  // Fetching premium status
     }
 }
+
 
 #Preview {
     HomePageView()

@@ -31,6 +31,12 @@ struct DiamondStoreView: View {
                             .shadow(radius: 5)
                     }
                     .padding(.horizontal)
+//                    .onChange(of: navigateToBlackjack) { newValue in
+//                        if newValue {
+//                            // Force reload when navigating
+//                            
+//                        }
+//                    }
 
                     // Ad section
                     HStack {

@@ -132,10 +132,14 @@ struct Start: View {
             } else {
                 // Document doesn't exist; assume new user
                 navigationState = .onboarding
-                userDoc.setData(["isOnboarded": false], merge: true)  // Initialize user record
+                userDoc.setData([
+                    "isOnboarded": false,
+                    "premium": false  // New field added with default value
+                ], merge: true)
             }
         }
     }
+
 }
 
 #Preview {
