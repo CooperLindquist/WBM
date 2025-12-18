@@ -29,24 +29,26 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 struct WBMApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var sessionManager = SessionManager()
-
+    
     var body: some Scene {
         WindowGroup {
-            NavigationView {
+            Group {
                 if sessionManager.isLoading {
                     LoadingView()
-                } else if sessionManager.isSignedIn {
-                    TabBarView()
-                        .environmentObject(sessionManager)
-                } else {
+                } else if !sessionManager.isSignedIn {
                     Start()
-                        .environmentObject(sessionManager)
+                } else if sessionManager.isSignedIn && !sessionManager.hasCompletedProfile {
+                    EditProfileView(mode: .initialSetup, onSave: nil)
+
+
+                } else {
+                    TabBarView()
                 }
             }
-            .navigationViewStyle(StackNavigationViewStyle())
-            .onAppear {
-                sessionManager.checkAuthState()
-            }
+
+            .environmentObject(sessionManager)
+            .animation(.default, value: sessionManager.isSignedIn)
+            .animation(.default, value: sessionManager.isLoading)
         }
     }
 }

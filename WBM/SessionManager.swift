@@ -11,80 +11,98 @@ import FirebaseAuth
 import Firebase
 
 class SessionManager: ObservableObject {
-    @Published var isSignedIn: Bool = false {
-        didSet {
-            objectWillChange.send()
-        }
+    @Published var isSignedIn = false
+    @Published var hasCompletedProfile = false
+    @Published var isLoading = true
+    private var authHandle: AuthStateDidChangeListenerHandle?
+    
+    init() {
+        setupAuthListener()
     }
-    @Published var isFirstTimeUser: Bool = false {
-        didSet {
-            objectWillChange.send()
-        }
-    }
-    @Published var isLoading: Bool = true // Add loading state
+    
+    private func setupAuthListener() {
+        authHandle = Auth.auth().addStateDidChangeListener { [weak self] (_, user) in
+            guard let self = self else { return }
 
-    func checkAuthState() {
-        isLoading = true // Start loading
-        if let user = Auth.auth().currentUser {
-            let userRef = Firestore.firestore().collection("users").document(user.uid)
-            userRef.getDocument { document, error in
-                if let error = error {
-                    print("Error fetching user document: \(error.localizedDescription)")
+            self.isLoading = true
+
+            guard let user = user else {
+                DispatchQueue.main.async {
                     self.isSignedIn = false
-                    self.isFirstTimeUser = false
+                    self.hasCompletedProfile = false
                     self.isLoading = false
-                    return
                 }
-
-                if let document = document, document.exists {
-                    print("Existing user found.")
-                    self.isFirstTimeUser = false
-                    self.isSignedIn = true
-                    self.isLoading = false // End loading
-                } else {
-                    print("First-time user detected. Creating document...")
-                    // Create user document
-                    userRef.setData([
-                        "spotlightsRemaining": 1,
-                        "diamonds": 100,
-                        "name": "",
-                        "bio": "",
-                        "height": "66",
-                        "weight": "150",
-                        "gender": "",
-                        "relationshipGoal": "",
-                        "languages": [],
-                        "profileImageURLs": []
-                    ]) { error in
-                        if let error = error {
-                            print("Error creating user document: \(error.localizedDescription)")
-                            self.isFirstTimeUser = false
-                        } else {
-                            print("User document created successfully.")
-                            self.isFirstTimeUser = true
-                        }
-                        self.isSignedIn = true
-                        self.isLoading = false // End loading after document creation
-                    }
-                }
+                return
             }
-        } else {
-            print("No user signed in.")
-            isSignedIn = false
-            isFirstTimeUser = false
-            isLoading = false
+
+            self.checkUserDocument(uid: user.uid)
         }
     }
 
+    
+    private func checkUserDocument(uid: String) {
+        let userRef = Firestore.firestore().collection("users").document(uid)
 
+        userRef.getDocument { [weak self] document, error in
+            guard let self = self else { return }
 
+            DispatchQueue.main.async {
+                if let document = document, document.exists {
+                    let data = document.data() ?? [:]
+                    self.hasCompletedProfile = data["hasCompletedProfile"] as? Bool ?? false
+                    self.isSignedIn = true
+                } else {
+                    self.createNewUserDocument(ref: userRef)
+                }
 
+                self.isLoading = false
+            }
+        }
+    }
+
+    
+    private func createNewUserDocument(ref: DocumentReference) {
+        ref.setData([
+            "spotlightsRemaining": 1,
+            "diamonds": 100,
+            "name": "",
+            "bio": "",
+            "height": "66",
+            "weight": "150",
+            "gender": "",
+            "relationshipGoal": "",
+            "languages": [],
+            "profileImageURLs": [],
+            "hasCompletedProfile": false
+        ])
+ { [weak self] error in
+            guard let self = self else { return }
+            
+            if let error = error {
+                print("Error creating user document: \(error.localizedDescription)")
+                self.isSignedIn = true
+                self.hasCompletedProfile = false
+            } else {
+                print("User document created successfully.")
+                self.isSignedIn = true
+                self.hasCompletedProfile = false
+
+            }
+        }
+    }
+    
     func signOut() {
         do {
             try Auth.auth().signOut()
-            isSignedIn = false
-        } catch let error as NSError {
+            // Auth listener will automatically update isSignedIn state
+        } catch {
             print("Error signing out: \(error.localizedDescription)")
+        }
+    }
+    
+    deinit {
+        if let handle = authHandle {
+            Auth.auth().removeStateDidChangeListener(handle)
         }
     }
 }

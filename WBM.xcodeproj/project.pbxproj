@@ -17,6 +17,9 @@
 		DB1F77A32D39F64100DD6378 /* ImageCropperView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB1F77A22D39F64100DD6378 /* ImageCropperView.swift */; };
 		DB1F77A52D3C8DAD00DD6378 /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB1F77A42D3C8DAD00DD6378 /* LocationManager.swift */; };
 		DB1F77A82D445CB600DD6378 /* EditProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB1F77A72D445CB600DD6378 /* EditProfileView.swift */; };
+		DB5554D42EF3A11000ABAB24 /* SwipeableUserCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB5554D32EF3A11000ABAB24 /* SwipeableUserCard.swift */; };
+		DB5554D62EF3A12C00ABAB24 /* PhotoManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB5554D52EF3A12C00ABAB24 /* PhotoManagerView.swift */; };
+		DB5554D82EF3A15500ABAB24 /* FullscreenPhotoViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB5554D72EF3A15500ABAB24 /* FullscreenPhotoViewer.swift */; };
 		DB6F759F2D45BFD700053A96 /* PremiumPromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB6F759E2D45BFD700053A96 /* PremiumPromptView.swift */; };
 		DB6F75A12D46F2BA00053A96 /* DiamondStoreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB6F75A02D46F2BA00053A96 /* DiamondStoreView.swift */; };
 		DB6F75A42D49414800053A96 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = DB6F75A32D49414800053A96 /* GoogleMobileAds */; };
@@ -60,6 +63,9 @@
 		DB1F77A22D39F64100DD6378 /* ImageCropperView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCropperView.swift; sourceTree = "<group>"; };
 		DB1F77A42D3C8DAD00DD6378 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
 		DB1F77A72D445CB600DD6378 /* EditProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditProfileView.swift; sourceTree = "<group>"; };
+		DB5554D32EF3A11000ABAB24 /* SwipeableUserCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeableUserCard.swift; sourceTree = "<group>"; };
+		DB5554D52EF3A12C00ABAB24 /* PhotoManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoManagerView.swift; sourceTree = "<group>"; };
+		DB5554D72EF3A15500ABAB24 /* FullscreenPhotoViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullscreenPhotoViewer.swift; sourceTree = "<group>"; };
 		DB6F759E2D45BFD700053A96 /* PremiumPromptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumPromptView.swift; sourceTree = "<group>"; };
 		DB6F75A02D46F2BA00053A96 /* DiamondStoreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiamondStoreView.swift; sourceTree = "<group>"; };
 		DB6F75A52D4AF8FB00053A96 /* BlackJackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlackJackView.swift; sourceTree = "<group>"; };
@@ -137,10 +143,13 @@
 				DB6F75A52D4AF8FB00053A96 /* BlackJackView.swift */,
 				DB1F77982D2F45D700DD6378 /* LoadingView.swift */,
 				DB1F779A2D35B6FD00DD6378 /* StarsView.swift */,
+				DB5554D72EF3A15500ABAB24 /* FullscreenPhotoViewer.swift */,
 				DBB4E97F2D285B7200C44E47 /* TabBarView.swift */,
 				DB12D43A2D2B2F1100A4DA2B /* MessagesView.swift */,
+				DB5554D52EF3A12C00ABAB24 /* PhotoManagerView.swift */,
 				DB12D43C2D2B3DA600A4DA2B /* ChatView.swift */,
 				DB1F779C2D35B97700DD6378 /* RateUserView.swift */,
+				DB5554D32EF3A11000ABAB24 /* SwipeableUserCard.swift */,
 				DBB4E9872D285D6800C44E47 /* LikesView.swift */,
 				DB6F759E2D45BFD700053A96 /* PremiumPromptView.swift */,
 				DBB4E9832D285D5300C44E47 /* HomePageView.swift */,
@@ -277,6 +286,8 @@
 				DB12D43B2D2B2F1100A4DA2B /* MessagesView.swift in Sources */,
 				DBB4E97E2D28560900C44E47 /* Start.swift in Sources */,
 				DBB4E9572D28508300C44E47 /* WBMApp.swift in Sources */,
+				DB5554D42EF3A11000ABAB24 /* SwipeableUserCard.swift in Sources */,
+				DB5554D62EF3A12C00ABAB24 /* PhotoManagerView.swift in Sources */,
 				DB82876E2D28711100A3795D /* LanguageList.swift in Sources */,
 				DB1F779D2D35B97700DD6378 /* RateUserView.swift in Sources */,
 				DBB4E9802D285B7200C44E47 /* TabBarView.swift in Sources */,
@@ -286,6 +297,7 @@
 				DBB4E9822D285C8300C44E47 /* ProfileView.swift in Sources */,
 				DBB4E9842D285D5300C44E47 /* HomePageView.swift in Sources */,
 				DB82876C2D2868F000A3795D /* OnboardingView.swift in Sources */,
+				DB5554D82EF3A15500ABAB24 /* FullscreenPhotoViewer.swift in Sources */,
 				DB1F77A82D445CB600DD6378 /* EditProfileView.swift in Sources */,
 				DB1F77A32D39F64100DD6378 /* ImageCropperView.swift in Sources */,
 				DBB4E9732D2851D900C44E47 /* User.swift in Sources */,

@@ -1,27 +1,43 @@
 import CoreLocation
-import Combine
+import FirebaseFirestore
+import FirebaseAuth
 
 class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
-    @Published var userLocation: CLLocationCoordinate2D?
+    @Published var userLocation: CLLocation? {
+        didSet {
+            if let location = userLocation {
+                saveLocationToFirestore(location)
+            }
+        }
+    }
 
     override init() {
         super.init()
         manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyBest
-    }
-
-    func requestLocation() {
         manager.requestWhenInUseAuthorization()
-        manager.requestLocation()
+        manager.startUpdatingLocation()
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let location = locations.first else { return }
-        userLocation = location.coordinate
+        guard let location = locations.last else { return }
+        userLocation = location
+        manager.stopUpdatingLocation()
     }
 
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        print("Failed to fetch location: \(error.localizedDescription)")
+    private func saveLocationToFirestore(_ location: CLLocation) {
+        guard let currentUserID = Auth.auth().currentUser?.uid else { return }
+        let lat = location.coordinate.latitude
+        let lon = location.coordinate.longitude
+
+        Firestore.firestore().collection("users").document(currentUserID).setData([
+            "location": ["latitude": lat, "longitude": lon]
+        ], merge: true) { error in
+            if let error = error {
+                print("Error saving location: \(error.localizedDescription)")
+            } else {
+                print("User location saved to Firestore.")
+            }
+        }
     }
 }

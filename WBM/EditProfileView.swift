@@ -4,9 +4,20 @@ import PhotosUI
 import FirebaseAuth
 import Cloudinary
 
+enum EditProfileMode {
+    case initialSetup   // app just launched, no profile yet
+    case editing        // user tapped "Edit Profile"
+}
+
+
+
 struct EditProfileView: View {
-    @State private var profileDataUpdated: Bool = false
-    @State private var uploadingImageIndices: Set<Int> = []
+    let mode: EditProfileMode
+    let onSave: (() -> Void)?
+
+    
+    @EnvironmentObject var sessionManager: SessionManager
+    @Environment(\.dismiss) private var dismiss
     @State private var uploadsInProgress: Int = 0
     @State private var isUploadingImages: Bool = false
     @State private var profileImageURLs: [String] = []
@@ -18,34 +29,48 @@ struct EditProfileView: View {
     @State private var gender: String = ""
     @State private var relationshipGoal: String = ""
     @State private var selectedLanguages: [String] = []
-    @State private var selectedImages: [UIImage] = []
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var isShowingLanguageList = false
-    @Environment(\.dismiss) var dismiss
+    @State private var age: String = ""
+    struct ProfileImage: Identifiable {
+        let id = UUID()
+        var image: UIImage
+        var isUploading: Bool = true
+    }
 
+    @State private var selectedImages: [ProfileImage] = []
+
+    
     private let relationshipGoals = ["Short-term", "Long-term", "Friends", "Marriage"]
     private let cloudinary = CLDCloudinary(configuration: CLDConfiguration(cloudName: "dfxodj9gk", apiKey: "998259646284382"))
-
+    
     var body: some View {
-        ZStack {
-            LinearGradient(gradient: Gradient(colors: [Color.pink.opacity(0.5), Color.blue.opacity(0.7)]), startPoint: .top, endPoint: .bottom)
+        NavigationStack {
+            ZStack {
+                LinearGradient(gradient: Gradient(colors: [Color.pink.opacity(0.5), Color.blue.opacity(0.7)]),
+                               startPoint: .top,
+                               endPoint: .bottom)
                 .edgesIgnoringSafeArea(.all)
-
-            ScrollView {
-                VStack(spacing: 30) {
-                    HeaderView
-
-                    PersonalInfoSection
-                    PhysicalAttributesSection
-                    GenderSection
-                    RelationshipGoalSection
-                    LanguageSelectionSection
-                    ProfilePicturesSection
-
-                    SaveButton
+                
+                ScrollView {
+                    VStack(spacing: 25) { // Reduced spacing for tighter layout
+                        HeaderView
+                        
+                        PersonalInfoSection
+                        AgeSection // New age section
+                        PhysicalAttributesSection
+                        GenderSection
+                        RelationshipGoalSection
+                        LanguageSelectionSection
+                        ProfilePicturesSection
+                        
+                        SaveButton
+                    }
+                    .padding(.horizontal)
                 }
-                .padding()
             }
+             
+
         }
         .onAppear(perform: loadInitialData)
         .onChange(of: photoItems) { _, newItems in
@@ -56,52 +81,87 @@ struct EditProfileView: View {
             LanguageList(selectedLanguages: $selectedLanguages)
         }
     }
-
+    private var AgeSection: some View {
+        SectionView(title: "Age") {
+            TextField("Enter your age", text: $age)
+                .keyboardType(.numberPad)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .overlay(
+                    HStack {
+                        Spacer()
+                        Text("years")
+                            .foregroundColor(.gray)
+                            .padding(.trailing, 8)
+                    }
+                )
+        }
+    }
+    
     private var HeaderView: some View {
         VStack {
             Text("Edit Profile")
                 .font(.largeTitle)
                 .fontWeight(.bold)
                 .foregroundColor(.white)
-
+            
             Text("Complete your profile to get started.")
                 .foregroundColor(.white)
                 .font(.subheadline)
         }
         .padding(.top, 40)
     }
-
+    
     private var PersonalInfoSection: some View {
         SectionView(title: "Personal Info") {
-            VStack(spacing: 15) {
+            VStack(spacing: 12) { // Tighter spacing
                 TextField("Name", text: $name)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-
+                    .textFieldStyle(EnhancedTextFieldStyle())
+                
                 TextField("Bio", text: $bio)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .textFieldStyle(EnhancedTextFieldStyle())
             }
         }
     }
-
+    
     private var PhysicalAttributesSection: some View {
         SectionView(title: "Physical Attributes") {
             VStack(spacing: 20) {
                 VStack(alignment: .leading) {
-                    Text("Height: \(height / 12)'\(height % 12)\"")
+                    Text("Height")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                    HStack {
+                        Text("\(height / 12)'\(height % 12)\"")
+                            .fontWeight(.semibold)
+                        Spacer()
+                        Text("Adjust slider")
+                            .foregroundColor(.gray)
+                            .font(.caption)
+                    }
                     Slider(value: Binding(
                         get: { Double(height) },
                         set: { height = Int($0) }
-                    ), in: 36...96, step: 1)
+                    ), in: 48...96, step: 1) // More reasonable height range
                 }
-
+                
                 VStack(alignment: .leading) {
-                    Text("Weight: \(Int(weight)) lbs")
-                    Slider(value: $weight, in: 50...400, step: 1)
+                    Text("Weight")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                    HStack {
+                        Text("\(Int(weight)) lbs")
+                            .fontWeight(.semibold)
+                        Spacer()
+                        Text("Adjust slider")
+                            .foregroundColor(.gray)
+                            .font(.caption)
+                    }
+                    Slider(value: $weight, in: 80...300, step: 1) // Adjusted weight range
                 }
             }
         }
     }
-
+    
     private var GenderSection: some View {
         SectionView(title: "Gender") {
             Picker("Gender", selection: $gender) {
@@ -112,7 +172,7 @@ struct EditProfileView: View {
             .pickerStyle(SegmentedPickerStyle())
         }
     }
-
+    
     private var RelationshipGoalSection: some View {
         SectionView(title: "Relationship Goal") {
             VStack(alignment: .leading, spacing: 15) {
@@ -132,8 +192,8 @@ struct EditProfileView: View {
             }
         }
     }
-
-
+    
+    
     private var LanguageSelectionSection: some View {
         SectionView(title: "Languages") {
             Button("Select Languages") {
@@ -142,41 +202,37 @@ struct EditProfileView: View {
             .buttonStyle(FilledButtonStyle())
         }
     }
-
+    
     private var ProfilePicturesSection: some View {
         SectionView(title: "Profile Pictures") {
             VStack {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 15) {
-                        ForEach(selectedImages.indices, id: \.self) { index in
+                        ForEach(selectedImages) { item in
                             VStack {
                                 ZStack {
-                                    // Image
-                                    Image(uiImage: selectedImages[index])
+                                    Image(uiImage: item.image)
                                         .resizable()
                                         .scaledToFill()
                                         .frame(width: 100, height: 100)
                                         .clipShape(RoundedRectangle(cornerRadius: 10))
 
-                                    // Loading indicator if the image is still uploading
-                                    if uploadingImageIndices.contains(index) {
-                                        Color.black.opacity(0.5)
+                                    if item.isUploading {
+                                        Color.black.opacity(0.4)
                                         ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                            .scaleEffect(2)
                                     }
                                 }
 
-                                // Trash button
-                                Button(action: {
-                                    removeProfilePicture(at: index)
-                                }) {
+                                Button {
+                                    removeProfilePicture(item)
+                                } label: {
                                     Image(systemName: "trash")
                                         .foregroundColor(.red)
                                 }
                             }
                         }
 
+                        
                         PhotosPicker(
                             selection: $photoItems,
                             maxSelectionCount: 6 - selectedImages.count,
@@ -196,8 +252,8 @@ struct EditProfileView: View {
             }
         }
     }
-
-
+    
+    
     private var SaveButton: some View {
         Button(action: saveProfileData) {
             Text("Save")
@@ -210,33 +266,29 @@ struct EditProfileView: View {
         }
         .disabled(isUploadingImages)  // Disable if images are still uploading
     }
-
-
-
+    
+    
+    
     private func SectionView<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 15) {
             Text(title)
                 .font(.headline)
                 .foregroundColor(.white)
-
+            
             content()
                 .padding()
                 .background(Color.white.opacity(0.8))
                 .cornerRadius(15)
         }
     }
-
-    private func removeProfilePicture(at index: Int) {
-        guard index < selectedImages.count, index < profileImageURLs.count else { return }
-
-        let removedImage = selectedImages.remove(at: index)
-        let imageUrl = profileImageURLs.remove(at: index) // Remove URL from the array
-
-        removeImageUrlFromFirestore(imageUrl: imageUrl) // Remove from Firestore
+    
+    private func removeProfilePicture(_ image: ProfileImage) {
+        selectedImages.removeAll { $0.id == image.id }
     }
 
-
-
+    
+    
+    
     private func removeImageUrlFromFirestore(imageUrl: String) {
         guard let user = Auth.auth().currentUser else {
             print("No authenticated user found")
@@ -255,11 +307,11 @@ struct EditProfileView: View {
                 print("❌ Document does not exist")
                 return
             }
-
+            
             // Confirm the profileImageURLs field exists and is an array
             if let imageUrls = document.data()?["profileImageURLs"] as? [String] {
                 print("Existing profileImageURLs: \(imageUrls)")
-
+                
                 // Proceed to remove the image URL from the array
                 userDoc.updateData([
                     "profileImageURLs": FieldValue.arrayRemove([imageUrl])
@@ -275,94 +327,115 @@ struct EditProfileView: View {
             }
         }
     }
-
- 
+    
+    
     
     private func loadImages(from items: [PhotosPickerItem]) {
+        guard !items.isEmpty else { return }
+
         isUploadingImages = true
         uploadsInProgress = items.count
 
-        for (index, item) in items.enumerated() {
-            guard selectedImages.count < 6 else { return }
+        for item in items {
+            let profileImage = ProfileImage(image: UIImage(), isUploading: true)
+            selectedImages.append(profileImage)
+            let id = profileImage.id
 
-            uploadingImageIndices.insert(index) // Mark the image as uploading
 
             item.loadTransferable(type: Data.self) { result in
-                switch result {
-                case .success(let data):
-                    if let data = data, let uiImage = UIImage(data: data) {
-                        if let croppedImage = cropImageToVerticalRectangle(uiImage, aspectRatio: 3.0 / 4.0) {
-                            selectedImages.append(croppedImage)
-                            if let croppedData = croppedImage.jpegData(compressionQuality: 0.8) {
-                                uploadImageToCloudinary(imageData: croppedData, atIndex: index)
-                            }
+                DispatchQueue.main.async {
+                    guard let index = selectedImages.firstIndex(where: { $0.id == id }) else { return }
+
+                    switch result {
+                    case .success(let data):
+                        guard let data,
+                              let uiImage = UIImage(data: data),
+                              let cropped = cropImageToPortrait(uiImage)
+                        else {
+
+                            selectedImages.remove(at: index)
+                            return
                         }
+
+                        selectedImages[index].image = cropped
+
+                        if let jpeg = cropped.jpegData(compressionQuality: 0.8) {
+                            uploadImageToCloudinary(imageData: jpeg, imageID: id)
+                        }
+
+                    case .failure:
+                        selectedImages.remove(at: index)
                     }
-                case .failure(let error):
-                    print("Error loading image: \(error.localizedDescription)")
                 }
             }
         }
     }
 
-    private func uploadImageToCloudinary(imageData: Data, atIndex index: Int) {
-        let params = CLDUploadRequestParams().setUploadPreset("profile pics")
+    
+    private func uploadImageToCloudinary(imageData: Data, imageID: UUID) {
+        cloudinary.createUploader().upload(
+            data: imageData,
+            uploadPreset: "profile pics"
+        ) { result, error in
+            DispatchQueue.main.async {
+                guard let index = selectedImages.firstIndex(where: { $0.id == imageID }) else { return }
 
-        cloudinary.createUploader().upload(data: imageData, uploadPreset: "profile pics", params: params, completionHandler: { result, error in
-            if let error = error {
-                print("Error uploading to Cloudinary: \(error.localizedDescription)")
-            } else if let result = result {
-                if let secureUrl = result.secureUrl {
-                    saveImageUrlToFirestore(url: secureUrl)
+                uploadsInProgress -= 1
+                selectedImages[index].isUploading = false
+
+                if let url = result?.secureUrl {
+                    saveImageUrlToFirestore(url: url)
+                }
+
+                if uploadsInProgress == 0 {
+                    isUploadingImages = false
                 }
             }
-
-            // Decrement the number of uploads in progress
-            uploadsInProgress -= 1
-            uploadingImageIndices.remove(index) // Mark the image as uploaded
-
-            // Once all uploads are complete, set isUploadingImages to false
-            if uploadsInProgress == 0 {
-                isUploadingImages = false
-            }
-        })
+        }
     }
 
+    
+    
+    private func cropImageToPortrait(_ image: UIImage) -> UIImage? {
 
-    private func cropImageToVerticalRectangle(_ image: UIImage, aspectRatio: CGFloat = 2.0 / 4.0) -> UIImage? {
-        let originalWidth = image.size.width
-        let originalHeight = image.size.height
-        let originalAspectRatio = originalWidth / originalHeight
+        // 1️⃣ Fix orientation first
+        let fixedImage = image.fixedOrientation()
 
-        var cropWidth = originalWidth
-        var cropHeight = originalHeight
+        // 2️⃣ iPhone portrait ratio (3:4)
+        let targetAspect: CGFloat = 3.0 / 4.0
 
-        if originalAspectRatio > aspectRatio {
-            // Crop horizontally to match aspect ratio
-            cropWidth = originalHeight * aspectRatio
+        let width = fixedImage.size.width
+        let height = fixedImage.size.height
+        let currentAspect = width / height
+
+        var cropRect: CGRect
+
+        if currentAspect > targetAspect {
+            // Image too wide → crop sides
+            let newWidth = height * targetAspect
+            let xOffset = (width - newWidth) / 2
+            cropRect = CGRect(x: xOffset, y: 0, width: newWidth, height: height)
         } else {
-            // Crop vertically to match aspect ratio
-            cropHeight = originalWidth / aspectRatio
+            // Image too tall → crop top/bottom
+            let newHeight = width / targetAspect
+            let yOffset = (height - newHeight) / 2
+            cropRect = CGRect(x: 0, y: yOffset, width: width, height: newHeight)
         }
 
-        let xOffset = (originalWidth - cropWidth) / 2
-        let yOffset = (originalHeight - cropHeight) / 2
-        let cropRect = CGRect(x: xOffset, y: yOffset, width: cropWidth, height: cropHeight)
-
-        guard let cgImage = image.cgImage?.cropping(to: cropRect) else { return nil }
-
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: cropWidth, height: cropHeight))
-        return renderer.image { _ in
-            UIImage(cgImage: cgImage).draw(in: CGRect(origin: .zero, size: CGSize(width: cropWidth, height: cropHeight)))
+        guard let cgImage = fixedImage.cgImage?.cropping(to: cropRect) else {
+            return nil
         }
+
+        return UIImage(cgImage: cgImage)
     }
 
-
-
+    
+    
+    
     private func saveImageUrlToFirestore(url: String) {
         guard let user = Auth.auth().currentUser else { return }
         let userDoc = Firestore.firestore().collection("users").document(user.uid)
-
+        
         userDoc.updateData([
             "profileImageURLs": FieldValue.arrayUnion([url])
         ]) { error in
@@ -373,33 +446,34 @@ struct EditProfileView: View {
             }
         }
     }
-
+    
     private func loadInitialData() {
         guard let user = Auth.auth().currentUser else { return }
-
+        
         Firestore.firestore().collection("users").document(user.uid).getDocument { document, error in
             if let error = error {
                 print("Error fetching initial data: \(error.localizedDescription)")
                 return
             }
-
+            
             if let document = document, document.exists {
                 let data = document.data() ?? [:]
                 name = data["name"] as? String ?? ""
                 bio = data["bio"] as? String ?? ""
+                age = data["age"] as? String ?? ""
                 height = Int(data["height"] as? String ?? "66") ?? 66
                 weight = Double(data["weight"] as? String ?? "150") ?? 150
                 gender = data["gender"] as? String ?? ""
                 relationshipGoal = data["relationshipGoal"] as? String ?? ""
                 selectedLanguages = data["languages"] as? [String] ?? []
-
+                
                 if let imageURLs = data["profileImageURLs"] as? [String] {
                     fetchImages(from: imageURLs)
                 }
             }
         }
     }
-
+    
     private func fetchImages(from imageURLs: [String]) {
         for urlString in imageURLs {
             if let url = URL(string: urlString) {
@@ -408,72 +482,96 @@ struct EditProfileView: View {
                         print("Error fetching image: \(error.localizedDescription)")
                         return
                     }
-
+                    
                     if let data = data, let uiImage = UIImage(data: data) {
                         DispatchQueue.main.async {
-                            selectedImages.append(uiImage)
+                            selectedImages.append(
+                                ProfileImage(image: uiImage, isUploading: false)
+                            )
+
                         }
                     }
                 }.resume()
             }
         }
     }
-
+    
     private func saveProfileData() {
-        guard let user = Auth.auth().currentUser else { return }
+        guard let user = Auth.auth().currentUser else {
+            print("❌ No authenticated user")
+            return
+        }
+
+        // Clean age input
+        let cleanedAge = age.filter { $0.isNumber }
+        let finalAge = cleanedAge.isEmpty ? "" : cleanedAge
+
         let updatedData: [String: Any] = [
             "name": name,
             "bio": bio,
+            "age": finalAge,
             "height": "\(height)",
             "weight": "\(Int(weight))",
             "gender": gender,
             "relationshipGoal": relationshipGoal,
-            "languages": selectedLanguages
+            "languages": selectedLanguages,
+            "hasCompletedProfile": true   // ✅ THIS FIXES THE LOOP
         ]
-        Firestore.firestore().collection("users").document(user.uid).setData(updatedData, merge: true) { error in
-            if let error = error {
-                print("Error saving profile data: \(error.localizedDescription)")
-            } else {
-                print("Successfully saved profile data.")
-                // Set the profile data updated flag to true
-                profileDataUpdated = true
-                loadInitialData() // Reload profile data
-                dismiss() // Dismiss the onboarding view
+
+        Firestore.firestore()
+            .collection("users")
+            .document(user.uid)
+            .setData(updatedData, merge: true) { error in
+                if let error = error {
+                    print("❌ Error saving profile data: \(error.localizedDescription)")
+                    return
+                }
+
+                print("✅ Profile saved successfully")
+
+                // 🔥 CRITICAL FIX FOR FIRST-TIME USERS
+                if mode == .initialSetup {
+                    sessionManager.hasCompletedProfile = true
+                }
+
+                // Refresh ProfileView if needed
+                onSave?()
+
+                dismiss()
+
+
             }
-        }
+        
     }
-
-
+    
 }
-//extension UIImage {
-//    func normalizedImage() -> UIImage {
-//        if imageOrientation == .up {
-//            return self // No adjustment needed
-//        }
-//
-//        UIGraphicsBeginImageContextWithOptions(size, false, scale)
-//        draw(in: CGRect(origin: .zero, size: size))
-//        let normalizedImage = UIGraphicsGetImageFromCurrentImageContext()
-//        UIGraphicsEndImageContext()
-//
-//        return normalizedImage ?? self
-//    }
-//}
-//
-//
-//struct FilledButtonStyle: ButtonStyle {
-//    func makeBody(configuration: Configuration) -> some View {
-//        configuration.label
-//            .padding()
-//            .frame(maxWidth: .infinity)
-//            .background(configuration.isPressed ? Color.blue.opacity(0.7) : Color.blue)
-//            .foregroundColor(.white)
-//            .cornerRadius(10)
-//            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
-//            .animation(.easeInOut(duration: 0.2), value: configuration.isPressed)
-//    }
-//}
+extension UIImage {
+    func fixedOrientation() -> UIImage {
+        if imageOrientation == .up {
+            return self
+        }
 
-#Preview {
-    EditProfileView()
+        UIGraphicsBeginImageContextWithOptions(size, false, scale)
+        draw(in: CGRect(origin: .zero, size: size))
+        let normalizedImage = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+
+        return normalizedImage ?? self
+    }
 }
+
+struct EnhancedTextFieldStyle: TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration
+            .padding(10)
+            .background(Color.white)
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+            )
+    }
+}
+
+
+
