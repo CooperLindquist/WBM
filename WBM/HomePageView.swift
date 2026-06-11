@@ -565,6 +565,19 @@ struct Filters {
     var genderFilterEnabled: Bool = false
     var locationFilterEnabled: Bool = false
     var maxDistance: Double = 50  // Add this line
+    var religion: String?
+    var ethnicity: String?
+    var smoking: String?
+    var drinking: String?
+    var language: String?
+    var relationshipGoal: String?
+
+    var religionFilterEnabled = false
+    var ethnicityFilterEnabled = false
+    var smokingFilterEnabled = false
+    var drinkingFilterEnabled = false
+    var languageFilterEnabled = false
+    var relationshipGoalFilterEnabled = false
     
     func matches(user: User, currentLocation: CLLocation?) -> Bool {
         if weightFilterEnabled {
@@ -591,6 +604,35 @@ struct Filters {
                 }
             } else {
                 // If the user location is not available, we should exclude this user
+                return false
+            }
+        }
+        if religionFilterEnabled {
+            if let religion = religion, user.religion != religion {
+                return false
+            }
+        }
+
+        if ethnicityFilterEnabled {
+            if let ethnicity = ethnicity, user.ethnicity != ethnicity {
+                return false
+            }
+        }
+
+        if smokingFilterEnabled {
+            if let smoking = smoking, user.smoking != smoking {
+                return false
+            }
+        }
+
+        if drinkingFilterEnabled {
+            if let drinking = drinking, user.drinking != drinking {
+                return false
+            }
+        }
+
+        if relationshipGoalFilterEnabled {
+            if let goal = relationshipGoal, user.relationshipGoal != goal {
                 return false
             }
         }
@@ -702,6 +744,76 @@ struct FilterSheet: View {
                         }
                     }
                 }
+                Section(header: Text("Religion")) {
+                    Toggle("Enable Religion Filter", isOn: $filters.religionFilterEnabled)
+
+                    if filters.religionFilterEnabled {
+                        Picker("Religion", selection: $filters.religion) {
+                            Text("Any").tag(nil as String?)
+                            Text("Christian").tag("Christian" as String?)
+                            Text("Muslim").tag("Muslim" as String?)
+                            Text("Jewish").tag("Jewish" as String?)
+                            Text("Atheist").tag("Atheist" as String?)
+                        }
+                    }
+                }
+                Section(header: Text("Relationship Goal")) {
+                    Toggle("Enable Goal Filter", isOn: $filters.relationshipGoalFilterEnabled)
+
+                    if filters.relationshipGoalFilterEnabled {
+                        Picker("Goal", selection: $filters.relationshipGoal) {
+                            Text("Any").tag(nil as String?)
+                            Text("Long-term relationship").tag("Long-term relationship" as String?)
+                            Text("Short-term dating").tag("Short-term dating" as String?)
+                            Text("Friends").tag("Friends" as String?)
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                    }
+                }
+                Section(header: Text("Ethnicity")) {
+                    Toggle("Enable Ethnicity Filter", isOn: $filters.ethnicityFilterEnabled)
+
+                    if filters.ethnicityFilterEnabled {
+                        Picker("Ethnicity", selection: $filters.ethnicity) {
+                            Text("Any").tag(nil as String?)
+                            Text("White").tag("White" as String?)
+                            Text("Black").tag("Black" as String?)
+                            Text("Asian").tag("Asian" as String?)
+                            Text("Hispanic / Latino").tag("Hispanic / Latino" as String?)
+                            Text("Middle Eastern").tag("Middle Eastern" as String?)
+                            Text("Native American").tag("Native American" as String?)
+                            Text("Mixed").tag("Mixed" as String?)
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                    }
+                }
+                Section(header: Text("Smoking")) {
+                    Toggle("Enable Smoking Filter", isOn: $filters.smokingFilterEnabled)
+
+                    if filters.smokingFilterEnabled {
+                        Picker("Smoking", selection: $filters.smoking) {
+                            Text("Any").tag(nil as String?)
+                            Text("Never").tag("Never" as String?)
+                            Text("Sometimes").tag("Sometimes" as String?)
+                            Text("Regularly").tag("Regularly" as String?)
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                    }
+                }
+                Section(header: Text("Drinking")) {
+                    Toggle("Enable Drinking Filter", isOn: $filters.drinkingFilterEnabled)
+
+                    if filters.drinkingFilterEnabled {
+                        Picker("Drinking", selection: $filters.drinking) {
+                            Text("Any").tag(nil as String?)
+                            Text("Never").tag("Never" as String?)
+                            Text("Socially").tag("Socially" as String?)
+                            Text("Often").tag("Often" as String?)
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                    }
+                }
+                
                 
             }
             .navigationTitle("Filters")
@@ -907,6 +1019,10 @@ struct User: Identifiable, Hashable {
     let gender: String?
     let languages: [String]?
     let relationshipGoal: String?
+    let religion: String?
+    let ethnicity: String?
+    let smoking: String?
+    let drinking: String?
     let imageURLs: [String]
     let premium: Bool
     let location: CLLocationCoordinate2D?
@@ -926,6 +1042,10 @@ struct User: Identifiable, Hashable {
         self.relationshipGoal = data["relationshipGoal"] as? String
         self.imageURLs = imageURLs
         self.premium = data["premium"] as? Bool ?? false
+        self.religion = data["religion"] as? String
+        self.ethnicity = data["ethnicity"] as? String
+        self.smoking = data["smoking"] as? String
+        self.drinking = data["drinking"] as? String
         
         if let locationData = data["location"] as? [String: Any],
            let lat = locationData["latitude"] as? CLLocationDegrees,

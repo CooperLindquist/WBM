@@ -92,7 +92,12 @@ struct ProfileView: View {
                             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 15), count: 2), spacing: 15) {
                                 StatsCard(icon: "ruler.fill", title: "Height", value: formatHeight(userData["height"] as? String ?? "") ?? "N/A")
                                 StatsCard(icon: "scalemass.fill", title: "Weight", value: "\(userData["weight"] as? String ?? "") lbs")
-                                StatsCard(icon: "globe", title: "Languages", value: (userData["languages"] as? [String] ?? []).joined(separator: ", "))
+                                StatsCard(
+                                    icon: "globe",
+                                    title: "Languages",
+                                    value: (userData["languages"] as? [String] ?? [])
+                                        .joined(separator: ", ")
+                                )
                                 StatsCard(
                                         icon: "calendar",
                                         title: "Age",
@@ -104,7 +109,60 @@ struct ProfileView: View {
                                         }()
                                     )
                                 }
-                            
+                            // Lifestyle & Beliefs
+                            if let religion = userData["religion"] as? String,
+                               let ethnicity = userData["ethnicity"] as? String {
+
+                                VStack(alignment: .leading, spacing: 15) {
+
+                                    Text("Lifestyle & Beliefs")
+                                        .font(.title3)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.white)
+
+                                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 15) {
+
+                                        StatsCard(
+                                            icon: "sparkles",
+                                            title: "Religion",
+                                            value: religion
+                                        )
+
+                                        StatsCard(
+                                            icon: "person.2.fill",
+                                            title: "Ethnicity",
+                                            value: ethnicity
+                                        )
+
+                                        StatsCard(
+                                            icon: "leaf.fill",
+                                            title: "Smoking",
+                                            value: userData["smoking"] as? String ?? "N/A"
+                                        )
+
+                                        StatsCard(
+                                            icon: "wineglass.fill",
+                                            title: "Drinking",
+                                            value: userData["drinking"] as? String ?? "N/A"
+                                        )
+
+                                    }
+
+                                }
+                            }
+                            if let languages = userData["languages"] as? [String], !languages.isEmpty {
+
+                                VStack(alignment: .leading, spacing: 12) {
+
+                                    Text("Languages")
+                                        .font(.title3)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.white)
+
+                                    FlexibleTagView(tags: languages)
+
+                                }
+                            }
                             
                             // Bio Section
                             if let bio = userData["bio"] as? String, !bio.isEmpty {
@@ -409,6 +467,30 @@ struct RoundedCorner: Shape {
             cornerRadii: CGSize(width: radius, height: radius)
         )
         return Path(path.cgPath)
+    }
+}
+struct FlexibleTagView: View {
+
+    let tags: [String]
+
+    var body: some View {
+
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 100))],
+            spacing: 10
+        ) {
+
+            ForEach(tags, id: \.self) { tag in
+                Text(tag)
+                    .font(.subheadline)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 12)
+                    .background(Color.white.opacity(0.2))
+                    .clipShape(Capsule())
+                    .foregroundColor(.white)
+            }
+
+        }
     }
 }
 

@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1ECDA42F2F686C5C00804FAD /* WBMStoreKit.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 1ECDA42E2F686C5C00804FAD /* WBMStoreKit.storekit */; };
+		1ECDA4312F68713E00804FAD /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECDA4302F68713E00804FAD /* StoreManager.swift */; };
 		DB12D43B2D2B2F1100A4DA2B /* MessagesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB12D43A2D2B2F1100A4DA2B /* MessagesView.swift */; };
 		DB12D43D2D2B3DA600A4DA2B /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB12D43C2D2B3DA600A4DA2B /* ChatView.swift */; };
 		DB12D43F2D2DE03E00A4DA2B /* SpotlightView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB12D43E2D2DE03E00A4DA2B /* SpotlightView.swift */; };
@@ -53,6 +55,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		1ECDA42E2F686C5C00804FAD /* WBMStoreKit.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = WBMStoreKit.storekit; sourceTree = "<group>"; };
+		1ECDA4302F68713E00804FAD /* StoreManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreManager.swift; sourceTree = "<group>"; };
 		DB12D43A2D2B2F1100A4DA2B /* MessagesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagesView.swift; sourceTree = "<group>"; };
 		DB12D43C2D2B3DA600A4DA2B /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		DB12D43E2D2DE03E00A4DA2B /* SpotlightView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpotlightView.swift; sourceTree = "<group>"; };
@@ -153,6 +157,8 @@
 				DBB4E9872D285D6800C44E47 /* LikesView.swift */,
 				DB6F759E2D45BFD700053A96 /* PremiumPromptView.swift */,
 				DBB4E9832D285D5300C44E47 /* HomePageView.swift */,
+				1ECDA42E2F686C5C00804FAD /* WBMStoreKit.storekit */,
+				1ECDA4302F68713E00804FAD /* StoreManager.swift */,
 				DB6F75A02D46F2BA00053A96 /* DiamondStoreView.swift */,
 				DB12D4402D2E071900A4DA2B /* Utlities.swift */,
 				DB12D43E2D2DE03E00A4DA2B /* SpotlightView.swift */,
@@ -263,6 +269,7 @@
 			files = (
 				DBB4E97B2D28550D00C44E47 /* GoogleService-Info.plist in Resources */,
 				DBB4E95E2D28508500C44E47 /* Preview Assets.xcassets in Resources */,
+				1ECDA42F2F686C5C00804FAD /* WBMStoreKit.storekit in Resources */,
 				DBB4E95B2D28508500C44E47 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -301,6 +308,7 @@
 				DB1F77A82D445CB600DD6378 /* EditProfileView.swift in Sources */,
 				DB1F77A32D39F64100DD6378 /* ImageCropperView.swift in Sources */,
 				DBB4E9732D2851D900C44E47 /* User.swift in Sources */,
+				1ECDA4312F68713E00804FAD /* StoreManager.swift in Sources */,
 				DBB4E98A2D285EDD00C44E47 /* SessionManager.swift in Sources */,
 				DB1F77992D2F45D700DD6378 /* LoadingView.swift in Sources */,
 			);

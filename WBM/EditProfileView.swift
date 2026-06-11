@@ -9,8 +9,119 @@ enum EditProfileMode {
     case editing        // user tapped "Edit Profile"
 }
 
+struct FlexibleView<Data: Collection, Content: View>: View where Data.Element: Hashable {
 
+    let data: Data
+    let spacing: CGFloat
+    let alignment: HorizontalAlignment
+    let content: (Data.Element) -> Content
 
+    init(
+        data: Data,
+        spacing: CGFloat = 10,
+        alignment: HorizontalAlignment = .leading,
+        @ViewBuilder content: @escaping (Data.Element) -> Content
+    ) {
+        self.data = data
+        self.spacing = spacing
+        self.alignment = alignment
+        self.content = content
+    }
+
+    var body: some View {
+
+        GeometryReader { geometry in
+            self.generateContent(in: geometry)
+        }
+
+    }
+
+    private func generateContent(in geometry: GeometryProxy) -> some View {
+
+        var width = CGFloat.zero
+        var height = CGFloat.zero
+
+        return ZStack(alignment: .topLeading) {
+
+            ForEach(Array(data), id: \.self) { item in
+
+                content(item)
+                    .padding(.all, 4)
+                    .alignmentGuide(.leading) { dimension in
+                        if abs(width - dimension.width) > geometry.size.width {
+                            width = 0
+                            height -= dimension.height
+                        }
+                        let result = width
+                        if item == data.first {
+                            width = 0
+                        } else {
+                            width -= dimension.width
+                        }
+                        return result
+                    }
+
+                    .alignmentGuide(.top) { dimension in
+                        let result = height
+                        if item == data.first {
+                            height = 0
+                        }
+                        return result
+                    }
+
+            }
+
+        }
+
+    }
+
+}
+struct ChipSelection: View {
+
+    let title: String
+    let options: [String]
+    @Binding var selection: String
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 110), spacing: 10)
+    ]
+
+    var body: some View {
+
+        VStack(alignment: .leading, spacing: 12) {
+
+            Text(title)
+                .font(.subheadline)
+                .foregroundColor(.gray)
+
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
+
+                ForEach(options, id: \.self) { option in
+
+                    Text(option)
+                        .font(.subheadline)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            selection == option ?
+                            Color.blue :
+                            Color.gray.opacity(0.2)
+                        )
+                        .foregroundColor(
+                            selection == option ? .white : .black
+                        )
+                        .clipShape(Capsule())
+                        .onTapGesture {
+                            selection = option
+                        }
+
+                }
+
+            }
+
+        }
+    }
+}
 struct EditProfileView: View {
     let mode: EditProfileMode
     let onSave: (() -> Void)?
@@ -18,6 +129,12 @@ struct EditProfileView: View {
     
     @EnvironmentObject var sessionManager: SessionManager
     @Environment(\.dismiss) private var dismiss
+    @State private var religion: String = ""
+    @State private var ethnicity: String = ""
+    @State private var drinking: String = ""
+    @State private var smoking: String = ""
+    @State private var cannabis: String = ""
+    @State private var politics: String = ""
     @State private var uploadsInProgress: Int = 0
     @State private var isUploadingImages: Bool = false
     @State private var profileImageURLs: [String] = []
@@ -53,17 +170,18 @@ struct EditProfileView: View {
                 .edgesIgnoringSafeArea(.all)
                 
                 ScrollView {
-                    VStack(spacing: 25) { // Reduced spacing for tighter layout
+                    VStack(spacing: 25) {
                         HeaderView
-                        
+
                         PersonalInfoSection
-                        AgeSection // New age section
+                        AgeSection
                         PhysicalAttributesSection
                         GenderSection
                         RelationshipGoalSection
+                        LifestyleSection
                         LanguageSelectionSection
                         ProfilePicturesSection
-                        
+
                         SaveButton
                     }
                     .padding(.horizontal)
@@ -172,6 +290,74 @@ struct EditProfileView: View {
             .pickerStyle(SegmentedPickerStyle())
         }
     }
+    private var LifestyleSection: some View {
+        SectionView(title: "Lifestyle & Beliefs") {
+            VStack(alignment: .leading, spacing: 25) {
+
+                ChipSelection(
+                    title: "Religion",
+                    options: religions,
+                    selection: $religion
+                )
+
+                ChipSelection(
+                    title: "Ethnicity",
+                    options: ethnicities,
+                    selection: $ethnicity
+                )
+
+                ChipSelection(
+                    title: "Drinking",
+                    options: drinkingOptions,
+                    selection: $drinking
+                )
+
+                ChipSelection(
+                    title: "Smoking",
+                    options: smokingOptions,
+                    selection: $smoking
+                )
+
+                ChipSelection(
+                    title: "Cannabis",
+                    options: cannabisOptions,
+                    selection: $cannabis
+                )
+
+                ChipSelection(
+                    title: "Politics",
+                    options: politicsOptions,
+                    selection: $politics
+                )
+
+            }
+        }
+    }
+    private let religions = [
+        "Christian", "Catholic", "Jewish", "Muslim",
+        "Hindu", "Buddhist", "Agnostic", "Atheist", "Other"
+    ]
+
+    private let ethnicities = [
+        "White", "Black", "Hispanic / Latino", "Asian",
+        "Middle Eastern", "Native American", "Mixed", "Other"
+    ]
+
+    private let drinkingOptions = [
+        "Never", "Socially", "Often"
+    ]
+
+    private let smokingOptions = [
+        "Never", "Sometimes", "Regularly"
+    ]
+
+    private let cannabisOptions = [
+        "Never", "Sometimes", "Often"
+    ]
+
+    private let politicsOptions = [
+        "Liberal", "Moderate", "Conservative", "Not Political"
+    ]
     
     private var RelationshipGoalSection: some View {
         SectionView(title: "Relationship Goal") {
@@ -458,6 +644,12 @@ struct EditProfileView: View {
             
             if let document = document, document.exists {
                 let data = document.data() ?? [:]
+                religion = data["religion"] as? String ?? ""
+                ethnicity = data["ethnicity"] as? String ?? ""
+                drinking = data["drinking"] as? String ?? ""
+                smoking = data["smoking"] as? String ?? ""
+                cannabis = data["cannabis"] as? String ?? ""
+                politics = data["politics"] as? String ?? ""
                 name = data["name"] as? String ?? ""
                 bio = data["bio"] as? String ?? ""
                 age = data["age"] as? String ?? ""
@@ -515,7 +707,14 @@ struct EditProfileView: View {
             "gender": gender,
             "relationshipGoal": relationshipGoal,
             "languages": selectedLanguages,
+            "religion": religion,
+            "ethnicity": ethnicity,
+            "drinking": drinking,
+            "smoking": smoking,
+            "cannabis": cannabis,
+            "politics": politics,
             "hasCompletedProfile": true   // ✅ THIS FIXES THE LOOP
+            
         ]
 
         Firestore.firestore()
