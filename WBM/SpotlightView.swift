@@ -39,12 +39,13 @@ func allocateMonthlySpotlights() {
 }
 
 // Function to add a user to SpotlightView
-func addToSpotlight(userID: String, additionalDuration: TimeInterval = 18000) {
+func addToSpotlight(userID: String, additionalDuration: TimeInterval = 18000, completion: ((Date?) -> Void)? = nil) {
     let spotlightRef = Firestore.firestore().collection("Spotlight").document(userID)
 
     spotlightRef.getDocument { document, error in
         if let error = error {
             print("Error checking spotlight document: \(error.localizedDescription)")
+            completion?(nil)
             return
         }
 
@@ -61,6 +62,11 @@ func addToSpotlight(userID: String, additionalDuration: TimeInterval = 18000) {
         spotlightRef.setData(["userID": userID, "expiresAt": newExpiration]) { error in
             if let error = error {
                 print("Error adding user to Spotlight: \(error.localizedDescription)")
+                completion?(nil)
+            } else {
+                // Fix: only call completion once the write has actually landed,
+                // so the UI doesn't read stale data immediately after.
+                completion?(newExpiration)
             }
         }
 
@@ -101,6 +107,9 @@ struct SpotlightView: View {
     @State private var isLoading = true
     @State private var spotlightsRemaining: Int = 0
     @State private var selectedUser: User?
+    @State private var ownSpotlightExpiresAt: Date?
+    @State private var timeRemainingText: String = ""
+    @State private var countdownTimer: Timer?
 
     var body: some View {
         ZStack {
@@ -109,7 +118,7 @@ struct SpotlightView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .edgesIgnoringSafeArea(.all)
+            .ignoresSafeArea()
 
             VStack {
                 HStack {
@@ -122,6 +131,21 @@ struct SpotlightView: View {
                                 .fill(Color.white.opacity(0.2))
                         )
                         .padding(.top, 20)
+                }
+
+                if let expiresAt = ownSpotlightExpiresAt, expiresAt > Date() {
+                    HStack {
+                        Image(systemName: "star.fill")
+                            .foregroundColor(.yellow)
+                        Text("You're in the Spotlight — \(timeRemainingText) left")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                    }
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 16)
+                    .background(Capsule().fill(Color.black.opacity(0.35)))
+                    .padding(.bottom, 10)
                 }
 
                 Button(action: useSpotlight) {
@@ -165,6 +189,7 @@ struct SpotlightView: View {
             }
         }
         .onAppear(perform: loadSpotlightedUsersAndCount)
+        .onDisappear { countdownTimer?.invalidate() }
         .fullScreenCover(item: $selectedUser) { user in
             VStack {
                 HStack {
@@ -215,7 +240,7 @@ struct SpotlightView: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .edgesIgnoringSafeArea(.all)
+                .ignoresSafeArea()
             )
         }
 
@@ -224,12 +249,22 @@ struct SpotlightView: View {
     private func useSpotlight() {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
 
-        if spotlightsRemaining > 0 {
-            addToSpotlight(userID: currentUserID)
-            spotlightsRemaining -= 1
-            loadSpotlightedUsersAndCount() // Refresh the page
-        } else {
+        guard spotlightsRemaining > 0 else {
             print("No spotlights remaining.")
+            return
+        }
+
+        addToSpotlight(userID: currentUserID) { expiresAt in
+            DispatchQueue.main.async {
+                spotlightsRemaining -= 1
+                // Fix: start the countdown immediately with the real expiry time
+                // returned from Firestore, instead of waiting for a full reload.
+                if let expiresAt = expiresAt {
+                    self.ownSpotlightExpiresAt = expiresAt
+                    self.startCountdown(to: expiresAt)
+                }
+                loadSpotlightedUsersAndCount() // still refresh the feed itself
+            }
         }
     }
 
@@ -252,35 +287,40 @@ struct SpotlightView: View {
                 return
             }
 
-            let swipedUsers = data["swipedUsers"] as? [String] ?? []
-            let likedUsers = data["likes"] as? [String] ?? []
-            let matchedUsers = data["matches"] as? [String] ?? []
-            let excludedUserIDs = Set(swipedUsers + likedUsers + matchedUsers)
+            currentUserRef.collection("swipedUsers").getDocuments { swipedSnapshot, _ in
+                let swipedUsers = swipedSnapshot?.documents.map { $0.documentID } ?? []
+                let likedUsers = data["likes"] as? [String] ?? []
+                let matchedUsers = data["matches"] as? [String] ?? []
 
-            fetchSpotlightedUsers { userIds in
-                let filteredUserIds = userIds.filter { !excludedUserIDs.contains($0) }
+                // Fix: also exclude the current user's own ID so they never see
+                // themselves as a tappable, likeable card in their own Spotlight feed.
+                let excludedUserIDs = Set(swipedUsers + likedUsers + matchedUsers + [currentUserID])
 
-                guard !filteredUserIds.isEmpty else {
-                    DispatchQueue.main.async {
-                        self.spotlightedUsers = []
-                        self.isLoading = false
-                    }
-                    return
-                }
+                fetchSpotlightedUsers { userIds in
+                    let filteredUserIds = userIds.filter { !excludedUserIDs.contains($0) }
 
-                let usersRef = Firestore.firestore().collection("users")
-                usersRef.whereField(FieldPath.documentID(), in: filteredUserIds).getDocuments { snapshot, error in
-                    if let error = error {
-                        print("Error fetching spotlighted user data: \(error.localizedDescription)")
-                        isLoading = false
+                    guard !filteredUserIds.isEmpty else {
+                        DispatchQueue.main.async {
+                            self.spotlightedUsers = []
+                            self.isLoading = false
+                        }
                         return
                     }
 
-                    spotlightedUsers = snapshot?.documents.compactMap { doc -> User? in
-                        return User(id: doc.documentID, data: doc.data())
-                    } ?? []
+                    let usersRef = Firestore.firestore().collection("users")
+                    usersRef.whereField(FieldPath.documentID(), in: filteredUserIds).getDocuments { snapshot, error in
+                        if let error = error {
+                            print("Error fetching spotlighted user data: \(error.localizedDescription)")
+                            isLoading = false
+                            return
+                        }
 
-                    isLoading = false
+                        spotlightedUsers = snapshot?.documents.compactMap { doc -> User? in
+                            return User(id: doc.documentID, data: doc.data())
+                        } ?? []
+
+                        isLoading = false
+                    }
                 }
             }
 
@@ -289,6 +329,50 @@ struct SpotlightView: View {
                     self.spotlightsRemaining = count
                 }
             }
+        }
+
+        // Separately check if the current user is themselves spotlighted right now,
+        // so we can show the "You're in the Spotlight" banner + countdown.
+        Firestore.firestore().collection("Spotlight").document(currentUserID).getDocument { doc, _ in
+            guard let expiresAt = (doc?.data()?["expiresAt"] as? Timestamp)?.dateValue(),
+                  expiresAt > Date() else {
+                DispatchQueue.main.async {
+                    self.ownSpotlightExpiresAt = nil
+                    self.countdownTimer?.invalidate()
+                }
+                return
+            }
+            DispatchQueue.main.async {
+                self.ownSpotlightExpiresAt = expiresAt
+                self.startCountdown(to: expiresAt)
+            }
+        }
+    }
+
+    private func startCountdown(to expiresAt: Date) {
+        countdownTimer?.invalidate()
+        updateTimeRemainingText(until: expiresAt)
+
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { timer in
+            if expiresAt <= Date() {
+                timer.invalidate()
+                ownSpotlightExpiresAt = nil
+                return
+            }
+            updateTimeRemainingText(until: expiresAt)
+        }
+    }
+
+    private func updateTimeRemainingText(until expiresAt: Date) {
+        let remaining = max(0, expiresAt.timeIntervalSinceNow)
+        let hours = Int(remaining) / 3600
+        let minutes = (Int(remaining) % 3600) / 60
+        let seconds = Int(remaining) % 60
+
+        if hours > 0 {
+            timeRemainingText = String(format: "%dh %dm", hours, minutes)
+        } else {
+            timeRemainingText = String(format: "%dm %ds", minutes, seconds)
         }
     }
 

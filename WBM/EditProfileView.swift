@@ -3,6 +3,7 @@ import Firebase
 import PhotosUI
 import FirebaseAuth
 import Cloudinary
+import SDWebImage
 
 enum EditProfileMode {
     case initialSetup   // app just launched, no profile yet
@@ -167,7 +168,7 @@ struct EditProfileView: View {
                 LinearGradient(gradient: Gradient(colors: [Color.pink.opacity(0.5), Color.blue.opacity(0.7)]),
                                startPoint: .top,
                                endPoint: .bottom)
-                .edgesIgnoringSafeArea(.all)
+                .ignoresSafeArea()
                 
                 ScrollView {
                     VStack(spacing: 25) {
@@ -660,30 +661,27 @@ struct EditProfileView: View {
                 selectedLanguages = data["languages"] as? [String] ?? []
                 
                 if let imageURLs = data["profileImageURLs"] as? [String] {
-                    fetchImages(from: imageURLs)
+                    loadExistingImages(from: imageURLs)
                 }
             }
         }
     }
     
-    private func fetchImages(from imageURLs: [String]) {
+    private func loadExistingImages(from imageURLs: [String]) {
+        // Fix #6: use SDWebImageManager which caches images on disk automatically.
+        // Re-opening the edit screen no longer re-downloads images from Cloudinary —
+        // subsequent loads are instant reads from the local cache.
         for urlString in imageURLs {
-            if let url = URL(string: urlString) {
-                URLSession.shared.dataTask(with: url) { data, response, error in
-                    if let error = error {
-                        print("Error fetching image: \(error.localizedDescription)")
-                        return
-                    }
-                    
-                    if let data = data, let uiImage = UIImage(data: data) {
-                        DispatchQueue.main.async {
-                            selectedImages.append(
-                                ProfileImage(image: uiImage, isUploading: false)
-                            )
-
-                        }
-                    }
-                }.resume()
+            guard let url = URL(string: urlString) else { continue }
+            SDWebImageManager.shared.loadImage(
+                with: url,
+                options: [.continueInBackground, .highPriority],
+                progress: nil
+            ) { image, _, _, _, _, _ in
+                guard let image = image else { return }
+                DispatchQueue.main.async {
+                    selectedImages.append(ProfileImage(image: image, isUploading: false))
+                }
             }
         }
     }

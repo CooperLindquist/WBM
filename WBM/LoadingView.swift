@@ -15,7 +15,7 @@ struct LoadingView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .edgesIgnoringSafeArea(.all)
+            .ignoresSafeArea()
 
             VStack {
                 Image("WBM") // Use your logo from assets

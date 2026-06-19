@@ -28,7 +28,7 @@ struct Start: View {
                         startPoint: .top,
                         endPoint: .bottom
                     )
-                    .edgesIgnoringSafeArea(.all)
+                    .ignoresSafeArea()
                     
                     VStack(spacing: 20) {
                         Image("WBM_resized")

@@ -27,7 +27,7 @@ struct HomePageView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .edgesIgnoringSafeArea(.all)
+            .ignoresSafeArea()
             
             if isLoading {
                 ProgressView("Loading Users...")
@@ -168,108 +168,149 @@ struct HomePageView: View {
                 }
         .onAppear {
             loadExcludedUsersAndFetchUsers()
-            fetchDiamonds()
         }
     }
     private func showDetailedView(for user: User) {
             selectedUser = user
         }
     
+    // Resets only people the user skipped or unliked — never touches matches,
+    // since those are active conversations and shouldn't reappear in the swipe stack.
     private func resetSwipes() {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
+        let userRef = Firestore.firestore().collection("users").document(currentUserID)
 
-        // 1️⃣ Clear local state
-        excludedUsers.removeAll()
         lastSwipedUser = nil
+        users.removeAll()
 
-        // 2️⃣ Clear Firestore swipe history
-        Firestore.firestore()
-            .collection("users")
-            .document(currentUserID)
-            .updateData([
-                "swipedUsers": [],
-                "likes": [] // OPTIONAL: remove this line if you want likes to persist
-            ]) { error in
-                if let error = error {
-                    print("Error resetting swipes: \(error.localizedDescription)")
-                } else {
-                    // 3️⃣ Reload users after reset completes
-                    fetchUsers()
-                }
-            }
-    }
-
-
-    private func fetchDiamonds() {
-        guard let currentUserID = Auth.auth().currentUser?.uid else { return }
-        let userDoc = Firestore.firestore().collection("users").document(currentUserID)
-        
-        userDoc.getDocument { document, error in
+        // Delete every doc in the swipedUsers subcollection (skips)
+        userRef.collection("swipedUsers").getDocuments { snapshot, error in
             if let error = error {
-                print("Error fetching diamonds: \(error.localizedDescription)")
+                print("Error fetching swiped users to reset: \(error.localizedDescription)")
                 return
             }
-            
-            if let data = document?.data(), let userDiamonds = data["diamonds"] as? Int {
-                self.diamonds = userDiamonds
+
+            let batch = Firestore.firestore().batch()
+            snapshot?.documents.forEach { batch.deleteDocument($0.reference) }
+
+            batch.commit { error in
+                if let error = error {
+                    print("Error resetting swipes: \(error.localizedDescription)")
+                    return
+                }
+
+                // Clear likes (one-sided likes you sent that never matched) —
+                // matches are intentionally left untouched.
+                userRef.updateData(["likes": []]) { error in
+                    if let error = error {
+                        print("Error clearing likes during reset: \(error.localizedDescription)")
+                    }
+                    // Rebuild excludedUsers properly (will now just contain matches)
+                    // then fetch a fresh stack.
+                    loadExcludedUsersAndFetchUsers()
+                }
             }
         }
     }
+
+
+
     
     private func loadExcludedUsersAndFetchUsers() {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
         isLoading = true
-        
+
         let userDoc = Firestore.firestore().collection("users").document(currentUserID)
-        
+
         userDoc.getDocument { document, error in
             if let error = error {
                 print("Error fetching excluded users: \(error.localizedDescription)")
                 isLoading = false
                 return
             }
-            
+
             if let data = document?.data() {
-                let liked = data["likes"] as? [String] ?? []
+                let liked   = data["likes"]   as? [String] ?? []
                 let matched = data["matches"] as? [String] ?? []
                 self.excludedUsers = Set(liked + matched)
+                // Fix #9: read diamonds here — same doc, no extra Firestore read needed
+                if let d = data["diamonds"] as? Int { self.diamonds = d }
             }
-            
-            fetchUsers()
+
+            userDoc.updateData(["lastActive": Timestamp(date: Date())])
+
+            // Fix #2: load swiped users from subcollection before fetching candidates
+            userDoc.collection("swipedUsers").getDocuments { snap, _ in
+                let swiped = snap?.documents.map { $0.documentID } ?? []
+                self.excludedUsers.formUnion(swiped)
+                fetchUsers()
+            }
         }
     }
-    
+
+    // MARK: - Paginated + Scored Fetch
+    // Fetches up to `pageSize` users at a time. Called again automatically
+    // when the stack drops to `refetchThreshold` cards.
+
+    private let pageSize = 20
+    private let refetchThreshold = 5
+
     private func fetchUsers() {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
-        
-        Firestore.firestore().collection("users").getDocuments { snapshot, error in
-            if let error = error {
-                print("Error fetching users: \(error.localizedDescription)")
-                isLoading = false
-                return
-            }
-            
-            guard let currentLocation = locationManager.userLocation else {
-                print("User location not available yet.")
-                isLoading = false
-                return
-            }
-            
-            if let documents = snapshot?.documents {
-                let fetchedUsers = documents.compactMap { doc -> User? in
-                    guard let data = doc.data() as? [String: Any], doc.documentID != currentUserID else { return nil }
-                    
-                    // Create the User object without filtering by distance here
-                    return User(id: doc.documentID, data: data)
+
+        // Fetch active spotlights first so we can boost them in scoring
+        fetchSpotlightedIDs { spotlightedIDs in
+            var query: Query = Firestore.firestore()
+                .collection("users")
+                .limit(to: self.pageSize)
+
+            Firestore.firestore().collection("users")
+                .limit(to: self.pageSize)
+                .getDocuments { snapshot, error in
+                    if let error = error {
+                        print("Error fetching users: \(error.localizedDescription)")
+                        self.isLoading = false
+                        return
+                    }
+
+                    let currentLocation = self.locationManager.userLocation
+
+                    let fetched: [User] = snapshot?.documents.compactMap { doc in
+                        guard doc.documentID != currentUserID else { return nil }
+                        guard !self.excludedUsers.contains(doc.documentID) else { return nil }
+                        guard let user = User(id: doc.documentID, data: doc.data()) else { return nil }
+
+                        // Apply filters (distance, weight, height, etc.)
+                        guard self.filters.matches(user: user, currentLocation: currentLocation) else { return nil }
+
+                        return user
+                    } ?? []
+
+                    // Score and rank the candidates
+                    let ranked = SwipeAlgorithm.rank(fetched, spotlightedIDs: spotlightedIDs)
+
+                    DispatchQueue.main.async {
+                        // Avoid duplicates if called while cards are still in stack
+                        let existingIDs = Set(self.users.map { $0.id })
+                        let newUsers = ranked.filter { !existingIDs.contains($0.id) }
+                        self.users.append(contentsOf: newUsers)
+                        self.isLoading = false
+                    }
                 }
-                
-                // Now apply the filter including distance only if enabled
-                self.users = fetchedUsers.filter { user in
-                    !self.excludedUsers.contains(user.id) && filters.matches(user: user, currentLocation: currentLocation)
-                }
-            }
-            
-            isLoading = false
+        }
+    }
+
+    /// Fetch currently active spotlight user IDs from Firestore
+    private func fetchSpotlightedIDs(completion: @escaping (Set<String>) -> Void) {
+        Firestore.firestore().collection("Spotlight").getDocuments { snapshot, _ in
+            let ids: Set<String> = Set(
+                snapshot?.documents.compactMap { doc -> String? in
+                    guard let expiresAt = (doc.data()["expiresAt"] as? Timestamp)?.dateValue(),
+                          expiresAt > Date() else { return nil }
+                    return doc.documentID
+                } ?? []
+            )
+            completion(ids)
         }
     }
     
@@ -286,6 +327,7 @@ struct HomePageView: View {
         let skippedUser = users.removeLast()
         lastSwipedUser = skippedUser
         updateExcludedUsers(skippedUser.id)
+        refetchIfNeeded()
     }
     private func undoSwipe() {
         guard let user = lastSwipedUser else { return }
@@ -300,6 +342,12 @@ struct HomePageView: View {
 
 
     
+    /// Silently fetch more users when stack is running low
+    private func refetchIfNeeded() {
+        guard users.count <= refetchThreshold, !isLoading else { return }
+        fetchUsers()
+    }
+
     private func approveUser() {
         guard !users.isEmpty else { return }
         guard diamonds >= 10 else { return } // Ensure the user has enough diamonds
@@ -327,21 +375,26 @@ struct HomePageView: View {
         }
         
         updateExcludedUsers(approvedUser.id)
+        refetchIfNeeded()
     }
-    
-    
-    
+
     private func updateExcludedUsers(_ userID: String) {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
         excludedUsers.insert(userID)
-        
-        Firestore.firestore().collection("users").document(currentUserID).updateData([
-            "swipedUsers": FieldValue.arrayUnion([userID])
-        ]) { error in
-            if let error = error {
-                print("Error updating excluded users: \(error.localizedDescription)")
+
+        // Fix #2: write to subcollection instead of array on the user doc.
+        // Arrays grow forever and Firestore docs have a 1MB limit.
+        // Subcollection entries are tiny and scale to millions of swipes.
+        Firestore.firestore()
+            .collection("users")
+            .document(currentUserID)
+            .collection("swipedUsers")
+            .document(userID)
+            .setData(["swipedAt": Timestamp(date: Date())]) { error in
+                if let error = error {
+                    print("Error recording swipe: \(error.localizedDescription)")
+                }
             }
-        }
     }
 }
 struct CompactUserCardView: View {
@@ -448,8 +501,8 @@ struct CompactUserCardView: View {
 // MARK: - Detailed User View
 struct UserDetailView: View {
     let user: User
-    @Environment(\.presentationMode) var presentationMode
-    
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -512,10 +565,10 @@ struct UserDetailView: View {
                 Spacer()
             }
         }
-        .edgesIgnoringSafeArea(.top)
+        .ignoresSafeArea(edges: .top)
         .overlay(alignment: .topTrailing) {
             Button(action: {
-                presentationMode.wrappedValue.dismiss()
+                dismiss()
             }) {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title)
@@ -548,278 +601,6 @@ struct DetailRow: View {
             Text(text)
                 .font(.body)
             Spacer()
-        }
-    }
-}
-
-
-// Filters Struct - Updated to support UserDefaults
-struct Filters {
-    var minWeight: Double = 100
-    var maxWeight: Double = 300
-    var minHeight: Double = 50
-    var maxHeight: Double = 84
-    var gender: String? = nil
-    var weightFilterEnabled: Bool = false
-    var heightFilterEnabled: Bool = false
-    var genderFilterEnabled: Bool = false
-    var locationFilterEnabled: Bool = false
-    var maxDistance: Double = 50  // Add this line
-    var religion: String?
-    var ethnicity: String?
-    var smoking: String?
-    var drinking: String?
-    var language: String?
-    var relationshipGoal: String?
-
-    var religionFilterEnabled = false
-    var ethnicityFilterEnabled = false
-    var smokingFilterEnabled = false
-    var drinkingFilterEnabled = false
-    var languageFilterEnabled = false
-    var relationshipGoalFilterEnabled = false
-    
-    func matches(user: User, currentLocation: CLLocation?) -> Bool {
-        if weightFilterEnabled {
-            if let weight = Double(user.weight ?? ""), weight < minWeight || weight > maxWeight {
-                return false
-            }
-        }
-        if heightFilterEnabled {
-            if let height = Double(user.height ?? ""), height < minHeight || height > maxHeight {
-                return false
-            }
-        }
-        if genderFilterEnabled {
-            if let gender = gender, user.gender != gender {
-                return false
-            }
-        }
-        if locationFilterEnabled {
-            if let currentLocation = currentLocation, let userLocation = user.location {
-                let distanceInMeters = currentLocation.distance(from: CLLocation(latitude: userLocation.latitude, longitude: userLocation.longitude))
-                let distanceInMiles = distanceInMeters / 1609.34
-                if distanceInMiles > maxDistance {
-                    return false
-                }
-            } else {
-                // If the user location is not available, we should exclude this user
-                return false
-            }
-        }
-        if religionFilterEnabled {
-            if let religion = religion, user.religion != religion {
-                return false
-            }
-        }
-
-        if ethnicityFilterEnabled {
-            if let ethnicity = ethnicity, user.ethnicity != ethnicity {
-                return false
-            }
-        }
-
-        if smokingFilterEnabled {
-            if let smoking = smoking, user.smoking != smoking {
-                return false
-            }
-        }
-
-        if drinkingFilterEnabled {
-            if let drinking = drinking, user.drinking != drinking {
-                return false
-            }
-        }
-
-        if relationshipGoalFilterEnabled {
-            if let goal = relationshipGoal, user.relationshipGoal != goal {
-                return false
-            }
-        }
-        return true
-    }
-    
-    
-    // Save filters to UserDefaults
-    func saveFilters() {
-        UserDefaults.standard.set(minWeight, forKey: "minWeight")
-        UserDefaults.standard.set(maxWeight, forKey: "maxWeight")
-        UserDefaults.standard.set(minHeight, forKey: "minHeight")
-        UserDefaults.standard.set(maxHeight, forKey: "maxHeight")
-        UserDefaults.standard.set(gender, forKey: "gender")
-        UserDefaults.standard.set(weightFilterEnabled, forKey: "weightFilterEnabled")
-        UserDefaults.standard.set(heightFilterEnabled, forKey: "heightFilterEnabled")
-        UserDefaults.standard.set(genderFilterEnabled, forKey: "genderFilterEnabled")
-        UserDefaults.standard.set(locationFilterEnabled, forKey: "locationFilterEnabled")
-        UserDefaults.standard.set(maxDistance, forKey: "maxDistance")  // Save distance
-    }
-    
-    // Load filters from UserDefaults
-    static func loadFilters() -> Filters {
-        let minWeight = UserDefaults.standard.double(forKey: "minWeight")
-        let maxWeight = UserDefaults.standard.double(forKey: "maxWeight")
-        let minHeight = UserDefaults.standard.double(forKey: "minHeight")
-        let maxHeight = UserDefaults.standard.double(forKey: "maxHeight")
-        let gender = UserDefaults.standard.string(forKey: "gender")
-        let weightFilterEnabled = UserDefaults.standard.bool(forKey: "weightFilterEnabled")
-        let heightFilterEnabled = UserDefaults.standard.bool(forKey: "heightFilterEnabled")
-        let genderFilterEnabled = UserDefaults.standard.bool(forKey: "genderFilterEnabled")
-        let locationFilterEnabled = UserDefaults.standard.bool(forKey: "locationFilterEnabled")
-        let maxDistance = UserDefaults.standard.double(forKey: "maxDistance") // Load distance
-        
-        return Filters(
-            minWeight: minWeight,
-            maxWeight: maxWeight,
-            minHeight: minHeight,
-            maxHeight: maxHeight,
-            gender: gender,
-            weightFilterEnabled: weightFilterEnabled,
-            heightFilterEnabled: heightFilterEnabled,
-            genderFilterEnabled: genderFilterEnabled,
-            locationFilterEnabled: locationFilterEnabled,
-            maxDistance: maxDistance > 0 ? maxDistance : 50  // Default to 50 if not set
-        )
-    }
-}
-
-
-// FilterSheet UI - Added switches for each filter and set default to off
-struct FilterSheet: View {
-    @Binding var filters: Filters
-    var applyFilters: () -> Void
-    @State private var distance: Double = 50  // default value
-    
-    
-    var body: some View {
-        NavigationView {
-            Form {
-                Section(header: Text("Weight Range")) {
-                    Toggle("Enable Weight Filter", isOn: $filters.weightFilterEnabled)
-                    if filters.weightFilterEnabled {
-                        VStack {
-                            Text("Min Weight: \(Int(filters.minWeight)) lbs")
-                            Slider(value: $filters.minWeight, in: 50...300, step: 1)
-                        }
-                        VStack {
-                            Text("Max Weight: \(Int(filters.maxWeight)) lbs")
-                            Slider(value: $filters.maxWeight, in: 50...300, step: 1)
-                        }
-                    }
-                }
-                Section(header: Text("Height Range")) {
-                    Toggle("Enable Height Filter", isOn: $filters.heightFilterEnabled)
-                    if filters.heightFilterEnabled {
-                        VStack {
-                            Text("Min Height: \(Int(filters.minHeight)) inches")
-                            Slider(value: $filters.minHeight, in: 50...84, step: 1)
-                        }
-                        VStack {
-                            Text("Max Height: \(Int(filters.maxHeight)) inches")
-                            Slider(value: $filters.maxHeight, in: 50...84, step: 1)
-                        }
-                    }
-                }
-                
-                
-                Section(header: Text("Gender")) {
-                    Toggle("Enable Gender Filter", isOn: $filters.genderFilterEnabled)
-                    if filters.genderFilterEnabled {
-                        Picker("Gender", selection: $filters.gender) {
-                            Text("Any").tag(nil as String?)
-                            Text("Male").tag("Male" as String?)
-                            Text("Female").tag("Female" as String?)
-                            Text("Other").tag("Other" as String?)
-                        }
-                        .pickerStyle(MenuPickerStyle())
-                    }
-                }
-                Section(header: Text("Distance Filter")) {
-                    Toggle("Enable Distance Filter", isOn: $filters.locationFilterEnabled)
-                    if filters.locationFilterEnabled {
-                        VStack(alignment: .leading) {
-                            Slider(value: $filters.maxDistance, in: 1...100, step: 1)
-                            Text("\(Int(filters.maxDistance)) miles")
-                                .font(.subheadline)
-                                .foregroundColor(.gray)
-                        }
-                    }
-                }
-                Section(header: Text("Religion")) {
-                    Toggle("Enable Religion Filter", isOn: $filters.religionFilterEnabled)
-
-                    if filters.religionFilterEnabled {
-                        Picker("Religion", selection: $filters.religion) {
-                            Text("Any").tag(nil as String?)
-                            Text("Christian").tag("Christian" as String?)
-                            Text("Muslim").tag("Muslim" as String?)
-                            Text("Jewish").tag("Jewish" as String?)
-                            Text("Atheist").tag("Atheist" as String?)
-                        }
-                    }
-                }
-                Section(header: Text("Relationship Goal")) {
-                    Toggle("Enable Goal Filter", isOn: $filters.relationshipGoalFilterEnabled)
-
-                    if filters.relationshipGoalFilterEnabled {
-                        Picker("Goal", selection: $filters.relationshipGoal) {
-                            Text("Any").tag(nil as String?)
-                            Text("Long-term relationship").tag("Long-term relationship" as String?)
-                            Text("Short-term dating").tag("Short-term dating" as String?)
-                            Text("Friends").tag("Friends" as String?)
-                        }
-                        .pickerStyle(MenuPickerStyle())
-                    }
-                }
-                Section(header: Text("Ethnicity")) {
-                    Toggle("Enable Ethnicity Filter", isOn: $filters.ethnicityFilterEnabled)
-
-                    if filters.ethnicityFilterEnabled {
-                        Picker("Ethnicity", selection: $filters.ethnicity) {
-                            Text("Any").tag(nil as String?)
-                            Text("White").tag("White" as String?)
-                            Text("Black").tag("Black" as String?)
-                            Text("Asian").tag("Asian" as String?)
-                            Text("Hispanic / Latino").tag("Hispanic / Latino" as String?)
-                            Text("Middle Eastern").tag("Middle Eastern" as String?)
-                            Text("Native American").tag("Native American" as String?)
-                            Text("Mixed").tag("Mixed" as String?)
-                        }
-                        .pickerStyle(MenuPickerStyle())
-                    }
-                }
-                Section(header: Text("Smoking")) {
-                    Toggle("Enable Smoking Filter", isOn: $filters.smokingFilterEnabled)
-
-                    if filters.smokingFilterEnabled {
-                        Picker("Smoking", selection: $filters.smoking) {
-                            Text("Any").tag(nil as String?)
-                            Text("Never").tag("Never" as String?)
-                            Text("Sometimes").tag("Sometimes" as String?)
-                            Text("Regularly").tag("Regularly" as String?)
-                        }
-                        .pickerStyle(MenuPickerStyle())
-                    }
-                }
-                Section(header: Text("Drinking")) {
-                    Toggle("Enable Drinking Filter", isOn: $filters.drinkingFilterEnabled)
-
-                    if filters.drinkingFilterEnabled {
-                        Picker("Drinking", selection: $filters.drinking) {
-                            Text("Any").tag(nil as String?)
-                            Text("Never").tag("Never" as String?)
-                            Text("Socially").tag("Socially" as String?)
-                            Text("Often").tag("Often" as String?)
-                        }
-                        .pickerStyle(MenuPickerStyle())
-                    }
-                }
-                
-                
-            }
-            .navigationTitle("Filters")
-            .navigationBarItems(trailing: Button("Apply") {
-                applyFilters()
-            })
         }
     }
 }
@@ -978,7 +759,7 @@ struct UserCardView: View {
                 }
             }
         }
-        .edgesIgnoringSafeArea(.all)
+        .ignoresSafeArea()
     }
     
     private func showNextImage() {
@@ -1001,72 +782,6 @@ extension Collection {
         return indices.contains(index) ? self[index] : nil
     }
 }
-
-
-
-
-
-import CoreLocation
-
-
-struct User: Identifiable, Hashable {
-    let id: String
-    let age: String?
-    let name: String
-    let bio: String?
-    let height: String?
-    let weight: String?
-    let gender: String?
-    let languages: [String]?
-    let relationshipGoal: String?
-    let religion: String?
-    let ethnicity: String?
-    let smoking: String?
-    let drinking: String?
-    let imageURLs: [String]
-    let premium: Bool
-    let location: CLLocationCoordinate2D?
-    
-    init?(id: String, data: [String: Any]) {
-        guard let name = data["name"] as? String,
-              let imageURLs = data["profileImageURLs"] as? [String], !imageURLs.isEmpty else { return nil }
-        
-        self.id = id
-        self.name = name
-        self.age = data["age"] as? String
-        self.bio = data["bio"] as? String
-        self.height = data["height"] as? String
-        self.weight = data["weight"] as? String
-        self.gender = data["gender"] as? String
-        self.languages = data["languages"] as? [String]
-        self.relationshipGoal = data["relationshipGoal"] as? String
-        self.imageURLs = imageURLs
-        self.premium = data["premium"] as? Bool ?? false
-        self.religion = data["religion"] as? String
-        self.ethnicity = data["ethnicity"] as? String
-        self.smoking = data["smoking"] as? String
-        self.drinking = data["drinking"] as? String
-        
-        if let locationData = data["location"] as? [String: Any],
-           let lat = locationData["latitude"] as? CLLocationDegrees,
-           let lon = locationData["longitude"] as? CLLocationDegrees {
-            self.location = CLLocationCoordinate2D(latitude: lat, longitude: lon)
-        } else {
-            self.location = nil
-        }
-    }
-    
-    
-    // ✅ Manual Hashable & Equatable conformance
-    static func == (lhs: User, rhs: User) -> Bool {
-        return lhs.id == rhs.id
-    }
-    
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-    }
-}
-
 
 #Preview {
     HomePageView()

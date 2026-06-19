@@ -17,7 +17,7 @@ struct LikesView: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .edgesIgnoringSafeArea(.all)
+                .ignoresSafeArea()
 
                 if isLoading {
                     ProgressView("Loading Likes...")
@@ -123,7 +123,7 @@ struct LikesView: View {
                         startPoint: .top,
                         endPoint: .bottom
                     )
-                    .edgesIgnoringSafeArea(.all)
+                    .ignoresSafeArea()
                 )
             }
             .onAppear(perform: fetchLikedUsers)

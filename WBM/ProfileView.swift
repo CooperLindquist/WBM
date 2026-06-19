@@ -30,7 +30,7 @@ struct ProfileView: View {
             LinearGradient(gradient: Gradient(colors: [Color.purple.opacity(0.6), Color.blue.opacity(0.7)]),
                            startPoint: .topLeading,
                            endPoint: .bottomTrailing)
-            .edgesIgnoringSafeArea(.all)
+            .ignoresSafeArea()
             
             if isLoading {
                 ProgressView()

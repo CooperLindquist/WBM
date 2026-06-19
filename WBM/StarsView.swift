@@ -25,7 +25,7 @@ struct StarsView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .edgesIgnoringSafeArea(.all)
+            .ignoresSafeArea()
 
             if isLoading {
                 ProgressView("Loading...")

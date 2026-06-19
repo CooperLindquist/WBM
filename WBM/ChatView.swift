@@ -18,7 +18,7 @@ struct ChatView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .edgesIgnoringSafeArea(.all)
+            .ignoresSafeArea()
 
             VStack {
                 ScrollView {
@@ -96,9 +96,13 @@ struct ChatView: View {
             }
         }
         .navigationTitle(chatPartner.name)
-        .onAppear(perform: fetchMessages)
+        .onAppear {
+            fetchMessages()
+            markLatestMessageRead()
+        }
         .onDisappear {
             listener?.remove()
+            updateTypingStatus(isTyping: false)
         }
         .onChange(of: newMessage) { _ in
             updateTypingStatus(isTyping: true) // Update typing status when the user types
@@ -118,7 +122,8 @@ struct ChatView: View {
     }
 
     private func listenForTyping() {
-        let chatID = generateChatID(user1: Auth.auth().currentUser!.uid, user2: chatPartner.id)
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        let chatID = generateChatID(user1: uid, user2: chatPartner.id)
 
         Firestore.firestore().collection("chats").document(chatID).addSnapshotListener { snapshot, error in
             if let error = error {
@@ -182,12 +187,16 @@ struct ChatView: View {
     private func sendMessage() {
         guard let currentUserID = Auth.auth().currentUser?.uid, !newMessage.isEmpty else { return }
         let chatID = generateChatID(user1: currentUserID, user2: chatPartner.id)
+        let text = newMessage
+        newMessage = ""
 
         let messageData: [String: Any] = [
             "senderID": currentUserID,
             "receiverID": chatPartner.id,
-            "text": newMessage,
-            "timestamp": Timestamp()
+            "text": text,
+            "timestamp": Timestamp(),
+            // Sender has already "read" their own message
+            "readBy": [currentUserID]
         ]
 
         Firestore.firestore().collection("chats")
@@ -195,7 +204,26 @@ struct ChatView: View {
             .collection("messages")
             .addDocument(data: messageData)
 
-        newMessage = ""
+        updateTypingStatus(isTyping: false)
+    }
+
+    // Mark the latest incoming message as read when this view is visible
+    private func markLatestMessageRead() {
+        guard let currentUserID = Auth.auth().currentUser?.uid else { return }
+        let chatID = generateChatID(user1: currentUserID, user2: chatPartner.id)
+
+        Firestore.firestore()
+            .collection("chats")
+            .document(chatID)
+            .collection("messages")
+            .order(by: "timestamp", descending: true)
+            .limit(to: 1)
+            .getDocuments { snap, _ in
+                guard let doc = snap?.documents.first,
+                      let senderID = doc.data()["senderID"] as? String,
+                      senderID != currentUserID else { return }
+                doc.reference.updateData(["readBy": FieldValue.arrayUnion([currentUserID])])
+            }
     }
 
     private func generateChatID(user1: String, user2: String) -> String {

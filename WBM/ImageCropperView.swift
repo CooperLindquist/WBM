@@ -11,7 +11,7 @@ struct ImageCropperView: View {
 
     var body: some View {
         ZStack {
-            Color.black.edgesIgnoringSafeArea(.all)
+            Color.black.ignoresSafeArea()
 
             GeometryReader { geo in
                 ZStack {

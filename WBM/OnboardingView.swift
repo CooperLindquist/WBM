@@ -55,7 +55,7 @@ struct OnboardingView: View {
         NavigationStack {
             ZStack {
                 LinearGradient(gradient: Gradient(colors: [Color.pink.opacity(0.5), Color.blue.opacity(0.7)]), startPoint: .top, endPoint: .bottom)
-                    .edgesIgnoringSafeArea(.all)
+                    .ignoresSafeArea()
                 
                 ScrollView {
                     VStack(spacing: 30) {

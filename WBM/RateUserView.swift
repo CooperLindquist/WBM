@@ -12,8 +12,12 @@ struct RateUserView: View {
     @State private var showAlert: Bool = false
     @State private var hasRated: Bool = false
     @State private var hasReviewed: Bool = false
-    @Environment(\.presentationMode) var presentationMode
-    @AppStorage("userID") private var currentUserID: String = "" // Assumes current user ID is stored locally.
+
+    // Fix #3: use Firebase Auth directly, never AppStorage
+    private var currentUserID: String { Auth.auth().currentUser?.uid ?? "" }
+
+    // Fix #11: use modern @Environment(\.dismiss)
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ZStack {
@@ -22,12 +26,12 @@ struct RateUserView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .edgesIgnoringSafeArea(.all)
+            .ignoresSafeArea() // Fix #13
 
             ScrollView {
                 VStack(spacing: 20) {
                     HStack {
-                        Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                        Button(action: { dismiss() }) {
                             Image(systemName: "chevron.left")
                                 .foregroundColor(.white)
                                 .font(.title2)
@@ -48,27 +52,24 @@ struct RateUserView: View {
                             .foregroundColor(.white)
                             .padding()
                     } else {
-                        ratingStars(title: "True to Looks", rating: $trueToLooksRating)
-                        ratingStars(title: "Personality", rating: $personalityRating)
-                        ratingStars(title: "Communication", rating: $communicationRating)
+                        ratingStars(title: "True to Looks",  rating: $trueToLooksRating)
+                        ratingStars(title: "Personality",    rating: $personalityRating)
+                        ratingStars(title: "Communication",  rating: $communicationRating)
 
-                        Button(action: {
-                            showAlert = true
-                        }) {
+                        Button(action: { showAlert = true }) {
                             Text("Submit Ratings")
                                 .fontWeight(.bold)
                                 .foregroundColor(.white)
                                 .padding()
                                 .frame(maxWidth: .infinity)
                                 .background(Color.green)
-                                .cornerRadius(10)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
                                 .shadow(radius: 5)
                         }
                         .padding(.horizontal)
                     }
 
-                    Divider()
-                        .background(Color.white)
+                    Divider().background(Color.white)
 
                     if hasReviewed {
                         Text("You have already submitted a written review.")
@@ -85,11 +86,9 @@ struct RateUserView: View {
                                 .frame(height: 100)
                                 .padding()
                                 .background(Color.white.opacity(0.8))
-                                .cornerRadius(10)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
                                 .shadow(radius: 5)
-                                .onChange(of: writtenReview) { _ in
-                                    limitReviewText()
-                                }
+                                .onChange(of: writtenReview) { _ in limitReviewText() }
 
                             Toggle("Submit Anonymously", isOn: $isAnonymous)
                                 .toggleStyle(SwitchToggleStyle(tint: Color.blue))
@@ -103,7 +102,7 @@ struct RateUserView: View {
                                     .padding()
                                     .frame(maxWidth: .infinity)
                                     .background(Color.blue)
-                                    .cornerRadius(10)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
                                     .shadow(radius: 5)
                             }
                             .padding(.horizontal)
@@ -115,18 +114,13 @@ struct RateUserView: View {
                 .padding()
             }
         }
-        .alert(isPresented: $showAlert) {
-            Alert(
-                title: Text("Submit Rating"),
-                message: Text("Are you sure you want to submit this rating? Once you submit a rating, you cannot change it."),
-                primaryButton: .default(Text("Yes"), action: submitRatings),
-                secondaryButton: .cancel(Text("No"))
-            )
+        .alert("Submit Rating", isPresented: $showAlert) {
+            Button("Yes", action: submitRatings)
+            Button("No", role: .cancel) {}
+        } message: {
+            Text("Once you submit a rating, you cannot change it.")
         }
         .onAppear {
-            if let user = Auth.auth().currentUser {
-                    currentUserID = user.uid
-                }
             checkIfUserHasRated()
             checkIfUserHasReviewed()
         }
@@ -137,14 +131,11 @@ struct RateUserView: View {
             Text(title)
                 .fontWeight(.semibold)
                 .foregroundColor(.white)
-
             HStack {
                 ForEach(1...5, id: \.self) { star in
                     Image(systemName: star <= rating.wrappedValue ? "star.fill" : "star")
                         .foregroundColor(star <= rating.wrappedValue ? .yellow : .gray)
-                        .onTapGesture {
-                            rating.wrappedValue = star
-                        }
+                        .onTapGesture { rating.wrappedValue = star }
                         .font(.largeTitle)
                 }
             }
@@ -153,104 +144,90 @@ struct RateUserView: View {
     }
 
     private func submitRatings() {
-        let ratings = [
-            "trueToLooks": Double(trueToLooksRating),
-            "personality": Double(personalityRating),
-            "communication": Double(communicationRating)
+        guard !currentUserID.isEmpty else { return }
+
+        let ratings: [String: Double] = [
+            "trueToLooks":    Double(trueToLooksRating),
+            "personality":    Double(personalityRating),
+            "communication":  Double(communicationRating)
         ]
 
-        Firestore.firestore().collection("users").document(chatPartner.id).getDocument { document, error in
+        let partnerRef = Firestore.firestore().collection("users").document(chatPartner.id)
+
+        partnerRef.getDocument { document, error in
             if let error = error {
                 print("Error fetching user ratings: \(error.localizedDescription)")
                 return
             }
 
-            if let document = document, document.exists, var data = document.data() {
-                for (key, newRating) in ratings {
-                    let currentAvg = data[key] as? Double ?? 0.0
-                    let count = data["\(key)Count"] as? Int ?? 0
-                    let updatedAvg = ((currentAvg * Double(count)) + newRating) / Double(count + 1)
-                    data[key] = updatedAvg
-                    data["\(key)Count"] = count + 1
-                }
-                Firestore.firestore().collection("users").document(chatPartner.id).setData(data)
-            } else {
-                var newData: [String: Any] = [:]
-                for (key, newRating) in ratings {
-                    newData[key] = newRating
-                    newData["\(key)Count"] = 1
-                }
-                Firestore.firestore().collection("users").document(chatPartner.id).setData(newData)
+            let existingData = document?.data() ?? [:]
+            var updates: [String: Any] = [:]
+
+            for (key, newRating) in ratings {
+                let currentAvg = existingData[key] as? Double ?? 0.0
+                let count      = existingData["\(key)Count"] as? Int ?? 0
+                let newAvg     = ((currentAvg * Double(count)) + newRating) / Double(count + 1)
+                updates[key]              = newAvg
+                updates["\(key)Count"]   = count + 1
             }
 
-            Firestore.firestore().collection("ratingsSubmitted").document("\(chatPartner.id)_\(currentUserID)").setData([
-                "hasRated": true
-            ])
+            // Fix: use updateData with merge so we never overwrite the whole document
+            partnerRef.updateData(updates)
+
+            Firestore.firestore()
+                .collection("ratingsSubmitted")
+                .document("\(chatPartner.id)_\(currentUserID)")
+                .setData(["hasRated": true])
 
             hasRated = true
         }
     }
 
     private func submitWrittenReview() {
-        guard !currentUserID.isEmpty else {
-            print("Error: currentUserID is empty")
-            return // Handle error, maybe show an alert to the user
-        }
+        guard !currentUserID.isEmpty else { return }
 
         let reviewData: [String: Any] = [
-            "review": writtenReview,
+            "review":     writtenReview,
             "isAnonymous": isAnonymous,
-            "reviewerID": currentUserID // This ensures reviewerID is correctly set
+            "reviewerID": currentUserID
         ]
 
-        Firestore.firestore().collection("users").document(chatPartner.id).updateData([
-            "reviews": FieldValue.arrayUnion([reviewData])
-        ]) { error in
-            if let error = error {
-                print("Error submitting review: \(error.localizedDescription)")
-                return
+        Firestore.firestore().collection("users").document(chatPartner.id)
+            .updateData(["reviews": FieldValue.arrayUnion([reviewData])]) { error in
+                if let error = error {
+                    print("Error submitting review: \(error.localizedDescription)")
+                    return
+                }
+
+                Firestore.firestore()
+                    .collection("reviewsSubmitted")
+                    .document("\(chatPartner.id)_\(currentUserID)")
+                    .setData(["hasReviewed": true])
+
+                hasReviewed = true
             }
-
-            Firestore.firestore().collection("reviewsSubmitted").document("\(chatPartner.id)_\(currentUserID)").setData([
-                "hasReviewed": true
-            ])
-
-            hasReviewed = true
-        }
     }
 
-
     private func checkIfUserHasRated() {
-        Firestore.firestore().collection("ratingsSubmitted").document("\(chatPartner.id)_\(currentUserID)").getDocument { document, error in
-            if let error = error {
-                print("Error checking rating status: \(error.localizedDescription)")
-                return
-            }
-
-            if let document = document, document.exists {
-                hasRated = true
-            }
-        }
+        guard !currentUserID.isEmpty else { return }
+        Firestore.firestore()
+            .collection("ratingsSubmitted")
+            .document("\(chatPartner.id)_\(currentUserID)")
+            .getDocument { doc, _ in hasRated = doc?.exists == true }
     }
 
     private func checkIfUserHasReviewed() {
-        Firestore.firestore().collection("reviewsSubmitted").document("\(chatPartner.id)_\(currentUserID)").getDocument { document, error in
-            if let error = error {
-                print("Error checking review status: \(error.localizedDescription)")
-                return
-            }
-
-            if let document = document, document.exists {
-                hasReviewed = true
-            }
-        }
+        guard !currentUserID.isEmpty else { return }
+        Firestore.firestore()
+            .collection("reviewsSubmitted")
+            .document("\(chatPartner.id)_\(currentUserID)")
+            .getDocument { doc, _ in hasReviewed = doc?.exists == true }
     }
 
     private func limitReviewText() {
-        let wordLimit = 100
         let words = writtenReview.split { $0.isWhitespace }
-        if words.count > wordLimit {
-            writtenReview = words.prefix(wordLimit).joined(separator: " ")
+        if words.count > 100 {
+            writtenReview = words.prefix(100).joined(separator: " ")
         }
     }
 }

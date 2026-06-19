@@ -4,10 +4,45 @@
 //
 //  Created by Cooper Lindquist on 1/29/25.
 //
-
+//  Rewritten to implement real casino blackjack rules:
+//  - Multiple simultaneous hands via splitting (up to 4 hands)
+//  - Independent bet per hand (so doubling/splitting tracks diamonds correctly)
+//  - Re-splitting supported, with split-aces restricted to one card each (standard rule)
+//  - Blackjack (natural 21) only pays out on the original first two cards,
+//    not after a hit or after a split
+//  - Dealer only plays after every player hand is finished (stood / busted / blackjack)
+//  - Each hand is settled independently against the final dealer hand
+//
 import SwiftUI
 import FirebaseFirestore
 import FirebaseAuth
+
+// MARK: - Card model
+
+/// Ranks are 1...13 where 1 = Ace, 11 = Jack, 12 = Queen, 13 = King.
+/// (Kept identical to the original encoding so your card image assets still work.)
+enum HandStatus: Equatable {
+    case playing
+    case stood
+    case busted
+    case blackjack   // natural 21 on first two cards
+    case surrendered // not used yet, reserved if you want to add surrender later
+}
+
+struct PlayerHand: Identifiable, Equatable {
+    let id = UUID()
+    var cards: [Int] = []
+    var bet: Int
+    var status: HandStatus = .playing
+    /// Split aces only get exactly one extra card and can never hit/double again.
+    var isSplitAces: Bool = false
+    /// True once this hand has already been doubled (can't double twice).
+    var hasDoubled: Bool = false
+
+    var isResolved: Bool {
+        status != .playing
+    }
+}
 
 struct BlackJackView: View {
     @State private var handsPlayedToday: Int = 0
@@ -20,13 +55,11 @@ struct BlackJackView: View {
         ZStack {
             // Background
             LinearGradient(gradient: Gradient(colors: [Color.pink.opacity(0.5), Color.blue.opacity(0.7)]), startPoint: .top, endPoint: .bottom)
-                .edgesIgnoringSafeArea(.all)
-
+                .ignoresSafeArea()
             VStack {
                 Text("Diamonds: \(diamonds)")
                     .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
                     .padding()
-
                 Button(action: { isGameActive = true }) {
                     Text("Play Blackjack")
                         .font(.title).fontWeight(.bold)
@@ -38,8 +71,7 @@ struct BlackJackView: View {
             }
         }
         .onAppear {
-            fetchDiamonds()
-            fetchHandsPlayedToday()
+            fetchUserData()
         }
         .onDisappear {
             hasFetchedHands = false
@@ -53,103 +85,87 @@ struct BlackJackView: View {
                      db: db)
         }
     }
-    private func fetchHandsPlayedToday() {
-            guard let userId = Auth.auth().currentUser?.uid else { return }
-            db.collection("users").document(userId).getDocument { snapshot, error in
-                if let data = snapshot?.data() {
-                    let lastPlayedDate = (data["lastPlayedDate"] as? Timestamp)?.dateValue() ?? Date()
-                    let currentHandsPlayed = data["handsPlayedToday"] as? Int ?? 0
-                    
-                    if !Calendar.current.isDate(lastPlayedDate, inSameDayAs: Date()) {
-                        // Reset in Firebase
-                        db.collection("users").document(userId).updateData([
-                            "handsPlayedToday": 0,
-                            "lastPlayedDate": Timestamp(date: Date())
-                        ]) { error in
-                            self.handsPlayedToday = (error == nil) ? 0 : currentHandsPlayed
-                            self.hasFetchedHands = true
-                        }
-                    } else {
-                        self.handsPlayedToday = currentHandsPlayed
-                        self.hasFetchedHands = true
-                    }
-                } else {
-                    self.hasFetchedHands = true
-                }
-            }
-        }
-    
-    
-    
-   
-    private func fetchDiamonds() {
+
+    private func fetchUserData() {
         guard let userId = Auth.auth().currentUser?.uid else { return }
         db.collection("users").document(userId).getDocument { snapshot, error in
-            if let data = snapshot?.data() {
-                diamonds = data["diamonds"] as? Int ?? 0
+            guard let data = snapshot?.data() else {
+                self.hasFetchedHands = true
+                return
+            }
+            self.diamonds = data["diamonds"] as? Int ?? 0
+            let lastPlayedDate = (data["lastPlayedDate"] as? Timestamp)?.dateValue() ?? Date()
+            let currentHandsPlayed = data["handsPlayedToday"] as? Int ?? 0
+            if !Calendar.current.isDate(lastPlayedDate, inSameDayAs: Date()) {
+                self.db.collection("users").document(userId).updateData([
+                    "handsPlayedToday": 0,
+                    "lastPlayedDate": Timestamp(date: Date())
+                ]) { error in
+                    self.handsPlayedToday = (error == nil) ? 0 : currentHandsPlayed
+                    self.hasFetchedHands = true
+                }
+            } else {
+                self.handsPlayedToday = currentHandsPlayed
+                self.hasFetchedHands = true
             }
         }
     }
-    
-    
+
+    // MARK: - GameView
+
     struct GameView: View {
         private let db: Firestore
-        
-        @State private var aceChoice: Int? = nil // Track user's choice
-        @State private var isAcePromptActive: Bool = false
-        @State private var splitHands: [Int] = []
-        @State private var playerHands: [[Int]] = []
-        @State private var currentHandIndex = 0
-        @State private var splitBet: Int = 0
-        @State private var isSplitActive: Bool = false
-        @State private var playerHand: [Int] = []
+
+        // Multi-hand state (replaces playerHand / splitHands / isSplitActive)
+        @State private var hands: [PlayerHand] = []
+        @State private var currentHandIndex: Int = 0
+
         @State private var dealerHand: [Int] = []
-        @State private var playerScore: Int = 0
-        @State private var dealerScore: Int = 0
+        @State private var dealerRevealed = false
+
         @State private var gameStatus: String = "Place Your Bet"
         @State private var betAmount: Int = 10
         @State private var showEndScreen: Bool = false
         @State private var gameStarted: Bool = false
+        @State private var gameEnded: Bool = false
+        @State private var roundResults: [String] = [] // one result line per hand, shown on end screen
+
         @State private var canPlay: Bool? = nil
         @State private var timeRemaining: Int = 0
         @State private var timer: Timer? = nil
-        @State private var gameEnded: Bool = false
+
         @Binding var isGameActive: Bool
         @Binding var diamonds: Int
-        @Binding var handsPlayedToday: Int // Receive from parent
+        @Binding var handsPlayedToday: Int
         @Binding var hasFetchedHands: Bool
+
         @State private var isPremium = false
         @State private var showPremiumAlert = false
-        @State private var dealerRevealed = false
-        @State private var dealerVisibleScore = 0
 
-        
-        
-        
+        private let maxHands = 4 // standard casino cap on splits (3 splits -> 4 hands)
+
         init(isGameActive: Binding<Bool>,
-                 diamonds: Binding<Int>,
-                 handsPlayedToday: Binding<Int>,
-                 hasFetchedHands: Binding<Bool>,
-                 db: Firestore) {
-                self._isGameActive = isGameActive
-                self._diamonds = diamonds
-                self._handsPlayedToday = handsPlayedToday
-                self._hasFetchedHands = hasFetchedHands
-                self.db = db
-            }
-        
+             diamonds: Binding<Int>,
+             handsPlayedToday: Binding<Int>,
+             hasFetchedHands: Binding<Bool>,
+             db: Firestore) {
+            self._isGameActive = isGameActive
+            self._diamonds = diamonds
+            self._handsPlayedToday = handsPlayedToday
+            self._hasFetchedHands = hasFetchedHands
+            self.db = db
+        }
+
         var body: some View {
             ZStack {
-                // Background Gradient
                 LinearGradient(
                     gradient: Gradient(colors: [Color.pink.opacity(0.5), Color.blue.opacity(0.7)]),
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .edgesIgnoringSafeArea(.all)
-                
+                .ignoresSafeArea()
+
                 VStack {
-                    // Diamonds & Exit
                     HStack {
                         Text("💎 Diamonds: \(diamonds)")
                             .font(.title2)
@@ -166,17 +182,7 @@ struct BlackJackView: View {
                         }
                     }
                     .padding(.horizontal)
-                    .alert("Choose Ace Value", isPresented: $isAcePromptActive) {
-                        Button("1") {
-                            aceChoice = 1
-                            updateScores() // Recalculate after choice
-                        }
-                        Button("11") {
-                            aceChoice = 11
-                            updateScores() // Recalculate after choice
-                        }
-                        
-                    }
+
                     if !gameStarted && !isPremium {
                         VStack {
                             if hasFetchedHands {
@@ -204,7 +210,6 @@ struct BlackJackView: View {
                                     .padding()
                             }
                         }
-                    
                         .alert("Go Premium", isPresented: $showPremiumAlert) {
                             Button("Cancel", role: .cancel) {}
                             Button("Upgrade") {
@@ -214,21 +219,7 @@ struct BlackJackView: View {
                             Text("Get unlimited games with WBM+!")
                         }
                     }
-                    if !isPremium && handsPlayedToday >= 3 {
-                        VStack {
-                            if timeRemaining > 0 {
-                                Text("Next free game in: \(timeFormatted(timeRemaining))")
-                                    .foregroundColor(.orange)
-                            } else {
-                                Button("Upgrade to Premium") {
-                                    showPremiumAlert = true
-                                }
-                                .foregroundColor(.yellow)
-                            }
-                        }
-                        .padding()
-                    }
-                    
+
                     // Bet Selection
                     if !gameStarted {
                         VStack(spacing: 20) {
@@ -236,7 +227,7 @@ struct BlackJackView: View {
                                 .font(.title2)
                                 .fontWeight(.bold)
                                 .foregroundColor(.white)
-                            
+
                             HStack {
                                 Button(action: { changeBet(by: -10) }) {
                                     Image(systemName: "minus.circle.fill")
@@ -244,7 +235,7 @@ struct BlackJackView: View {
                                         .foregroundColor(.red)
                                 }
                                 .disabled(betAmount <= 10)
-                                
+
                                 Text("\(betAmount) 💎")
                                     .font(.system(size: 28, weight: .bold, design: .rounded))
                                     .foregroundColor(.white)
@@ -252,7 +243,7 @@ struct BlackJackView: View {
                                     .padding(.vertical, 10)
                                     .background(Color.black.opacity(0.3))
                                     .cornerRadius(10)
-                                
+
                                 Button(action: { changeBet(by: 10) }) {
                                     Image(systemName: "plus.circle.fill")
                                         .font(.title)
@@ -260,7 +251,7 @@ struct BlackJackView: View {
                                 }
                                 .disabled(betAmount >= diamonds)
                             }
-                            
+
                             Button(action: {
                                 canPlayHand { canPlay in
                                     if canPlay {
@@ -289,14 +280,14 @@ struct BlackJackView: View {
                         .shadow(radius: 10)
                         .padding(.horizontal)
                     } else {
-                        // Game View
+                        // MARK: Active game table
                         VStack {
                             Text("Dealer's Hand")
                                 .font(.title2)
                                 .foregroundColor(.white)
                             HStack {
                                 ForEach(dealerHand.indices, id: \.self) { index in
-                                    if gameStarted && (index == 0 || dealerRevealed) {
+                                    if index == 0 || dealerRevealed {
                                         Image("\(dealerHand[index])")
                                             .resizable()
                                             .frame(width: 60, height: 90)
@@ -307,130 +298,63 @@ struct BlackJackView: View {
                                     }
                                 }
                             }
-                            Text("Score: \(dealerRevealed ? dealerScore : (dealerHand.count > 0 ? calculateHand([dealerHand[0]]) : 0))")
+                            Text("Score: \(dealerRevealed ? calculateHand(dealerHand) : (dealerHand.count > 0 ? calculateHand([dealerHand[0]]) : 0))")
                                 .foregroundColor(.white)
                                 .padding(.top, 5)
                         }
                         .padding(.top, 20)
-                        
+
                         Spacer()
-                        
-                        if !playerHands.isEmpty && currentHandIndex < playerHands.count {
-                            VStack {
-                                Text("Your Hand")
-                                    .font(.title2)
-                                    .foregroundColor(.white)
-                                HStack {
-                                    ForEach(playerHands[currentHandIndex], id: \.self) { card in
-                                        Image("\(card)")
-                                            .resizable()
-                                            .frame(width: 60, height: 90)
-                                    }
-                                }
-                                Text("Score: \(calculateHand(playerHands[currentHandIndex]))")
-                                    .foregroundColor(.white)
-                                    .padding(.top, 5)
-                            }
-                        } else {
-                            Text("Loading hand...")
-                                .foregroundColor(.white)
-                        }
-                        if isSplitActive {
-                            VStack {
-                                Text("Split Hand")
-                                    .font(.title2)
-                                    .foregroundColor(.white)
-                                HStack {
-                                    ForEach(splitHands, id: \.self) { card in
-                                        Image("\(card)")
-                                            .resizable()
-                                            .frame(width: 60, height: 90)
-                                    }
+
+                        // All player hands, with the active one highlighted
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(alignment: .top, spacing: 16) {
+                                ForEach(hands.indices, id: \.self) { index in
+                                    handView(for: index)
                                 }
                             }
+                            .padding(.horizontal)
                         }
-                        
-                        
+
                         Text(gameStatus)
                             .font(.title2)
                             .foregroundColor(.yellow)
                             .padding()
                             .animation(.easeInOut, value: gameStatus)
-                        
-                        HStack {
-                            Button(action: hit) {
-                                Text("Hit")
-                                    .bold()
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.blue)
-                                    .foregroundColor(.white)
-                                    .cornerRadius(10)
-                            }
-                            .disabled(showEndScreen)
-                            
-                            Button(action: stand) {
-                                Text("Stand")
-                                    .bold()
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.orange)
-                                    .foregroundColor(.white)
-                                    .cornerRadius(10)
-                            }
-                            .disabled(showEndScreen)
-                            if playerHand.count == 2 && diamonds >= betAmount {
-                                Button(action: doubleDown) {
-                                    Text("Double")
-                                        .bold()
-                                        .frame(maxWidth: .infinity)
-                                        .padding()
-                                        .background(Color.purple)
-                                        .foregroundColor(.white)
-                                        .cornerRadius(10)
-                                }
-                                .disabled(showEndScreen)
-                            }
-                            if canSplit() {
-                                Button(action: performSplit) {
-                                    Text("Split")
-                                        .bold()
-                                        .frame(maxWidth: .infinity)
-                                        .padding()
-                                        .background(Color.green)
-                                        .foregroundColor(.white)
-                                        .cornerRadius(10)
-                                }
-                                .disabled(showEndScreen)
-                            }
-                            
-                            
+
+                        if !showEndScreen, currentHandIndex < hands.count {
+                            actionButtons
                         }
-                        .padding(.horizontal)
                     }
                 }
                 .padding(.bottom, 30)
                 .onAppear {
-                    // Add this modifier right after the VStack declaration
                     checkPremiumStatus()
                     if !isPremium {
                         loadTimerState()
                     }
                 }
-                
+
                 // End Screen
                 if showEndScreen {
-                    VStack {
-                        Text(gameStatus)
+                    VStack(spacing: 8) {
+                        Text("Round Over")
                             .font(.largeTitle)
                             .fontWeight(.bold)
                             .foregroundColor(.white)
-                            .padding()
-                        
+                            .padding(.bottom, 4)
+
+                        ForEach(roundResults.indices, id: \.self) { i in
+                            Text(roundResults[i])
+                                .font(.headline)
+                                .foregroundColor(.white)
+                        }
+
                         Text("New Balance: \(diamonds) 💎")
                             .font(.title2)
                             .foregroundColor(.white)
-                        
+                            .padding(.top, 8)
+
                         Button(action: restartGame) {
                             Text("Play Again")
                                 .bold()
@@ -440,8 +364,8 @@ struct BlackJackView: View {
                                 .foregroundColor(.white)
                                 .cornerRadius(10)
                         }
-                        .padding()
-                        
+                        .padding(.top)
+
                         Button(action: { isGameActive = false }) {
                             Text("Exit")
                                 .bold()
@@ -451,11 +375,10 @@ struct BlackJackView: View {
                                 .foregroundColor(.white)
                                 .cornerRadius(10)
                         }
-                        .padding()
                     }
-                    
-                    .frame(width: 300, height: 300)
-                    .background(Color.black.opacity(0.8))
+                    .padding()
+                    .frame(width: 320)
+                    .background(Color.black.opacity(0.85))
                     .cornerRadius(20)
                     .shadow(radius: 10)
                     .transition(.scale)
@@ -463,7 +386,7 @@ struct BlackJackView: View {
                         fetchHandsPlayedToday()
                         canPlayHand { result in
                             canPlay = result
-                            if !result && !isPremium { // Use the isPremium state variable
+                            if !result && !isPremium {
                                 loadTimerState()
                             }
                         }
@@ -472,11 +395,111 @@ struct BlackJackView: View {
                         timer?.invalidate()
                         saveTimerState()
                     }
-                    
                 }
             }
         }
-        
+
+        // MARK: - Subviews
+
+        @ViewBuilder
+        private func handView(for index: Int) -> some View {
+            let hand = hands[index]
+            VStack {
+                Text(hands.count > 1 ? "Hand \(index + 1)" : "Your Hand")
+                    .font(.title3)
+                    .foregroundColor(index == currentHandIndex && !showEndScreen ? .yellow : .white)
+
+                HStack {
+                    ForEach(hand.cards.indices, id: \.self) { cardIndex in
+                        Image("\(hand.cards[cardIndex])")
+                            .resizable()
+                            .frame(width: 60, height: 90)
+                    }
+                }
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(index == currentHandIndex && !showEndScreen ? Color.yellow : Color.clear, lineWidth: 3)
+                )
+
+                Text("Score: \(calculateHand(hand.cards))  •  \(hand.bet) 💎")
+                    .foregroundColor(.white)
+                    .padding(.top, 4)
+
+                statusLabel(for: hand.status)
+            }
+        }
+
+        @ViewBuilder
+        private func statusLabel(for status: HandStatus) -> some View {
+            switch status {
+            case .busted:
+                Text("Bust").foregroundColor(.red).bold()
+            case .blackjack:
+                Text("Blackjack!").foregroundColor(.green).bold()
+            case .stood:
+                Text("Stood").foregroundColor(.gray)
+            case .surrendered:
+                Text("Surrendered").foregroundColor(.orange)
+            case .playing:
+                EmptyView()
+            }
+        }
+
+        private var actionButtons: some View {
+            let activeHand = hands[currentHandIndex]
+            return HStack {
+                Button(action: hit) {
+                    Text("Hit")
+                        .bold()
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
+                .disabled(activeHand.isResolved)
+
+                Button(action: stand) {
+                    Text("Stand")
+                        .bold()
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.orange)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
+                .disabled(activeHand.isResolved)
+
+                if canDouble() {
+                    Button(action: doubleDown) {
+                        Text("Double")
+                            .bold()
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.purple)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                    }
+                }
+
+                if canSplit() {
+                    Button(action: performSplit) {
+                        Text("Split")
+                            .bold()
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.green)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
+
+        // MARK: - Premium / daily limit plumbing (unchanged behavior)
+
         private func checkPremiumStatus() {
             guard let userId = Auth.auth().currentUser?.uid else { return }
             db.collection("users").document(userId).getDocument { snapshot, _ in
@@ -488,46 +511,16 @@ struct BlackJackView: View {
                 }
             }
         }
-        private func checkBlackjack() -> Bool {
-            let playerTotal = calculateHand(playerHands[currentHandIndex])
-            let dealerTotal = calculateHand(dealerHand)
-            
-            if playerTotal == 21 && playerHands[currentHandIndex].count == 2 {
-                if dealerTotal == 21 && dealerHand.count == 2 {
-                    gameStatus = "Push! Both Blackjack 🤝"
-                    diamonds += betAmount
-                } else {
-                    gameStatus = "Blackjack! You Win 🎉"
-                    diamonds += Int(Double(betAmount) * 2.5)
-                }
-                updateDiamondsInFirebase()
-                showEndScreen = true
-                return true // Game should end
-            }
-            return false // Continue game
-        }
-        
-        private func refreshHandsPlayed() {
-            guard let userId = Auth.auth().currentUser?.uid else { return }
-            db.collection("users").document(userId).getDocument { snapshot, error in
-                if let data = snapshot?.data() {
-                    handsPlayedToday = data["handsPlayedToday"] as? Int ?? 0
-                }
-            }
-        }
 
-        
         private func canPlayHand(completion: @escaping (Bool) -> Void) {
             guard let userId = Auth.auth().currentUser?.uid else {
                 completion(false)
                 return
             }
-            
             db.collection("users").document(userId).getDocument { snapshot, error in
                 if let data = snapshot?.data() {
                     let isPremium = data["premium"] as? Bool ?? false
                     let handsPlayedToday = data["handsPlayedToday"] as? Int ?? 0
-                    
                     if isPremium {
                         completion(true)
                     } else {
@@ -543,30 +536,16 @@ struct BlackJackView: View {
                 }
             }
         }
-        private func updateHandsPlayed() {
-            handsPlayedToday += 1
-            UserDefaults.standard.set(handsPlayedToday, forKey: "handsPlayedToday")
-            UserDefaults.standard.set(Date(), forKey: "lastPlayedDate")
-            
-            if handsPlayedToday >= 3 && !isPremium {
-                startCountdownTimer()
-            }
-        }
+
         private func startCountdownTimer() {
             let calendar = Calendar.current
             let now = Date()
-            
-            // 1. Get the next midnight date
             guard let nextMidnight = calendar.date(
                 byAdding: .day,
                 value: 1,
                 to: calendar.startOfDay(for: now)
             ) else { return }
-            
-            // 2. Calculate seconds remaining and convert to Int
             timeRemaining = Int(nextMidnight.timeIntervalSince(now))
-            
-            // 3. Start the timer
             timer?.invalidate()
             timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
                 if timeRemaining > 0 {
@@ -577,24 +556,21 @@ struct BlackJackView: View {
                 }
             }
         }
-        
+
         private func timeFormatted(_ totalSeconds: Int) -> String {
             let hours = totalSeconds / 3600
             let minutes = (totalSeconds % 3600) / 60
             let seconds = totalSeconds % 60
             return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
         }
-        
-        // Start the countdown timer
+
         private func startCountdown() {
             let calendar = Calendar.current
             let now = Date()
             let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))!
             let secondsUntilTomorrow = Int(tomorrow.timeIntervalSince(now))
-            
             timeRemaining = secondsUntilTomorrow
             saveTimerState()
-            
             timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
                 if timeRemaining > 0 {
                     timeRemaining -= 1
@@ -605,73 +581,71 @@ struct BlackJackView: View {
                 }
             }
         }
-        
-        // Fetch handsPlayedToday from Firebase
+
         private func fetchHandsPlayedToday() {
             guard let userId = Auth.auth().currentUser?.uid else { return }
             db.collection("users").document(userId).getDocument { snapshot, error in
                 if let data = snapshot?.data() {
                     let lastPlayedDate = (data["lastPlayedDate"] as? Timestamp)?.dateValue() ?? Date()
                     let currentHandsPlayed = data["handsPlayedToday"] as? Int ?? 0
-                    
                     if !Calendar.current.isDate(lastPlayedDate, inSameDayAs: Date()) {
-                        // Reset in Firebase
                         db.collection("users").document(userId).updateData([
                             "handsPlayedToday": 0,
                             "lastPlayedDate": Timestamp(date: Date())
                         ]) { error in
                             handsPlayedToday = (error == nil) ? 0 : currentHandsPlayed
-                            hasFetchedHands = true // Update fetch status
+                            hasFetchedHands = true
                         }
                     } else {
                         handsPlayedToday = currentHandsPlayed
-                        hasFetchedHands = true // Update fetch status
+                        hasFetchedHands = true
                     }
                 } else {
-                    hasFetchedHands = true // Ensure fetch status updates even on error
+                    hasFetchedHands = true
                 }
             }
         }
-       
-        
+
         private func saveTimerState() {
             UserDefaults.standard.set(timeRemaining, forKey: "timeRemaining")
             UserDefaults.standard.set(Date(), forKey: "lastTimerUpdate")
         }
 
-        // Load the timer state
         private func loadTimerState() {
             let lastTimerUpdate = UserDefaults.standard.object(forKey: "lastTimerUpdate") as? Date ?? Date()
             let savedTimeRemaining = UserDefaults.standard.integer(forKey: "timeRemaining")
-            
             let elapsedTime = Int(Date().timeIntervalSince(lastTimerUpdate))
             timeRemaining = max(0, savedTimeRemaining - elapsedTime)
-            
-            // Always restart timer if needed
             if timeRemaining > 0 && handsPlayedToday >= 3 && !isPremium {
                 startCountdown()
             }
         }
-        
+
+        // MARK: - Core game flow
+
         private func startGame() {
             canPlayHand { canPlay in
                 guard canPlay else {
                     gameStatus = "Daily limit reached. Upgrade to premium!"
                     return
                 }
-                
+
                 gameStarted = true
-                aceChoice = nil
+                gameEnded = false
+                showEndScreen = false
+                roundResults = []
+                dealerRevealed = false
+
                 diamonds -= betAmount
                 updateDiamondsInFirebase()
-                
-                playerHands = [[drawCard(), drawCard()]] // Start with single hand
-                currentHandIndex = 0 // Reset to first hand
-                dealerRevealed = false
+
+                let starterHand = PlayerHand(cards: [drawCard(), drawCard()], bet: betAmount)
+                hands = [starterHand]
+                currentHandIndex = 0
+
                 dealerHand = [drawCard(), drawCard()]
-                updateScores()
-                
-                // Update hands played in Firebase
+                gameStatus = "Your turn"
+
                 guard let userId = Auth.auth().currentUser?.uid else { return }
                 db.collection("users").document(userId).updateData([
                     "handsPlayedToday": FieldValue.increment(Int64(1)),
@@ -681,131 +655,254 @@ struct BlackJackView: View {
                         self.handsPlayedToday += 1
                     }
                 }
-                
-                if playerHand.contains(1) {
-                    isAcePromptActive = true
-                    return
+
+                // Resolve a natural blackjack on the opening deal.
+                evaluateForBlackjack(at: 0)
+
+                // Dealer blackjack check (peek): if dealer shows ace/10 and has blackjack,
+                // round ends immediately for everyone once all hands are dealt.
+                if calculateHand(dealerHand) == 21 && dealerHand.count == 2 {
+                    dealerRevealed = true
+                    finishRoundIfAllHandsDone(forceDealerBlackjack: true)
+                } else {
+                    advanceToNextPlayableHandOrDealer()
                 }
-                
-                checkBlackjack()
             }
         }
-        
-        
-        private func hit() {
-            playerHands[currentHandIndex].append(drawCard())
-            updateScores()
-            
-            let currentTotal = calculateHand(playerHands[currentHandIndex])
-            
-            if currentTotal > 21 {
-                checkWinner() // End immediately on bust
-            } else if checkBlackjack() {
-                // Game already ended in checkBlackjack
+
+        /// Marks a hand blackjack if it qualifies (exactly 2 cards, value 21, not from a split,
+        /// and not split aces). Casino rule: a 21 made after a split does NOT count as blackjack.
+        private func evaluateForBlackjack(at index: Int) {
+            guard index < hands.count else { return }
+            var hand = hands[index]
+            guard hand.cards.count == 2, !hand.isSplitAces else {
                 return
             }
-        }
-        
-        
-        private func stand() {
-            guard !checkBlackjack() else { return } // Don't proceed if blackjack
-            
-            if currentHandIndex < playerHands.count - 1 {
-                currentHandIndex += 1
-                updateScores()
-            } else {
-                dealerRevealed = true
-                startDealerDrawing()
+            // Only the original opening deal (before any split has happened) can be a natural
+            // blackjack. Split-derived hands are never passed through this function, so checking
+            // hands.count == 1 here correctly means "this is still the single hand from the
+            // initial deal," matching the standard casino rule that 21-after-split isn't a natural.
+            if hands.count == 1, calculateHand(hand.cards) == 21 {
+                hand.status = .blackjack
+                hands[index] = hand
             }
         }
-        private func startDealerDrawing() {
-            // Don't draw if player already busted
-            guard !gameEnded else { return }
-            
-            dealerRevealed = true
-            updateScores()
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
-                var dealerTotal = calculateHand(dealerHand)
-                
-                // Only draw if player hasn't busted
-                while dealerTotal < 17 && !gameEnded {
-                    dealerHand.append(drawCard())
-                    dealerTotal = calculateHand(dealerHand)
-                    updateScores()
-                }
-                checkWinner()
-            }
+
+        private func canDouble() -> Bool {
+            guard currentHandIndex < hands.count else { return false }
+            let hand = hands[currentHandIndex]
+            return hand.cards.count == 2
+                && !hand.hasDoubled
+                && !hand.isSplitAces
+                && !hand.isResolved
+                && diamonds >= hand.bet
         }
-        
-        
-        
-        private func drawCard() -> Int {
-            return Int.random(in: 1...13)
-        }
+
         private func canSplit() -> Bool {
-            guard !playerHands.isEmpty else { return false }
-            let hand = playerHands[currentHandIndex]
-            return hand.count == 2 &&
-                   hand[0] == hand[1] &&
-                   diamonds >= betAmount
+            guard currentHandIndex < hands.count else { return false }
+            let hand = hands[currentHandIndex]
+            guard hand.cards.count == 2, !hand.isResolved, hands.count < maxHands else { return false }
+            let rankA = cardRankValue(hand.cards[0])
+            let rankB = cardRankValue(hand.cards[1])
+            return rankA == rankB && diamonds >= hand.bet
         }
-        
-        
-        
+
+        /// Maps a card to its blackjack rank value for split-eligibility comparison
+        /// (so a King and Queen both count as "10" and can be split together, matching
+        /// most casino rules; tighten this to `==` raw card if you want exact-rank-only splits).
+        private func cardRankValue(_ card: Int) -> Int {
+            min(card, 10)
+        }
+
+        private func hit() {
+            guard currentHandIndex < hands.count, !hands[currentHandIndex].isResolved else { return }
+            hands[currentHandIndex].cards.append(drawCard())
+
+            let total = calculateHand(hands[currentHandIndex].cards)
+            if total > 21 {
+                hands[currentHandIndex].status = .busted
+                advanceToNextPlayableHandOrDealer()
+            } else if hands[currentHandIndex].isSplitAces {
+                // Split aces only ever get one card.
+                hands[currentHandIndex].status = .stood
+                advanceToNextPlayableHandOrDealer()
+            }
+            // Note: reaching 21 here is NOT an automatic blackjack/stand —
+            // real casino rules let the player choose to stand manually,
+            // and a post-hit 21 is just a 21, not a natural blackjack.
+        }
+
+        private func stand() {
+            guard currentHandIndex < hands.count, !hands[currentHandIndex].isResolved else { return }
+            hands[currentHandIndex].status = .stood
+            advanceToNextPlayableHandOrDealer()
+        }
+
+        private func doubleDown() {
+            guard canDouble() else { return }
+            let bet = hands[currentHandIndex].bet
+
+            diamonds -= bet
+            updateDiamondsInFirebase()
+
+            hands[currentHandIndex].bet += bet
+            hands[currentHandIndex].hasDoubled = true
+            hands[currentHandIndex].cards.append(drawCard())
+
+            let total = calculateHand(hands[currentHandIndex].cards)
+            hands[currentHandIndex].status = total > 21 ? .busted : .stood
+
+            advanceToNextPlayableHandOrDealer()
+        }
+
         private func performSplit() {
             guard canSplit() else { return }
-            
-            // Get current hand
-            let originalHand = playerHands[currentHandIndex]
-            
-            // Create new hands
-            let newHand1 = [originalHand[0], drawCard()]
-            let newHand2 = [originalHand[1], drawCard()]
-            
-            // Replace current hand and add new hand
-            playerHands[currentHandIndex] = newHand1
-            playerHands.append(newHand2)
-            
-            // Deduct bet and update UI
-            diamonds -= betAmount
+
+            let original = hands[currentHandIndex]
+            let isSplittingAces = cardRankValue(original.cards[0]) == 1
+
+            diamonds -= original.bet
             updateDiamondsInFirebase()
-            updateScores()
+
+            var hand1 = PlayerHand(cards: [original.cards[0], drawCard()], bet: original.bet)
+            var hand2 = PlayerHand(cards: [original.cards[1], drawCard()], bet: original.bet)
+
+            if isSplittingAces {
+                // Standard rule: split aces get exactly one card each, then stand automatically.
+                hand1.isSplitAces = true
+                hand2.isSplitAces = true
+                hand1.status = .stood
+                hand2.status = .stood
+            }
+
+            hands[currentHandIndex] = hand1
+            hands.insert(hand2, at: currentHandIndex + 1)
+
+            advanceToNextPlayableHandOrDealer()
         }
-        
-        private func dealerTurn() {
-            if dealerScore < 17 {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { // Delay for UI update
-                    dealerHand.append(drawCard())
-                    updateScores()
-                    dealerTurn() // Recursive call to continue drawing
+
+        /// Moves currentHandIndex forward to the next hand that still needs player input.
+        /// If every hand is resolved, reveals the dealer and plays out the dealer's hand.
+        private func advanceToNextPlayableHandOrDealer() {
+            var idx = currentHandIndex
+            // If the current hand just got resolved, look forward; otherwise stay put
+            // (this function is only called right after a hand becomes resolved or
+            // immediately after dealing, so always search from currentHandIndex).
+            while idx < hands.count && hands[idx].isResolved {
+                idx += 1
+            }
+
+            if idx < hands.count {
+                currentHandIndex = idx
+                gameStatus = hands.count > 1 ? "Hand \(idx + 1): your turn" : "Your turn"
+                return
+            }
+
+            // All hands resolved — dealer plays only if at least one hand can still win
+            // (i.e. isn't every hand busted); casino tables still reveal the hole card either way.
+            currentHandIndex = hands.count // park past the end so action buttons hide
+            dealerRevealed = true
+
+            let anyHandStillIn = hands.contains { $0.status != .busted }
+            if anyHandStillIn {
+                playDealerHand()
+            } else {
+                finishRoundIfAllHandsDone()
+            }
+        }
+
+        private func playDealerHand() {
+            gameStatus = "Dealer's turn"
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                drawDealerCardStep()
+            }
+        }
+
+        /// Draws one dealer card at a time with a short delay between draws so the UI animates,
+        /// instead of looping synchronously (avoids freezing the UI and is easy to read).
+        private func drawDealerCardStep() {
+            let total = calculateHand(dealerHand)
+            if total < 17 {
+                dealerHand.append(drawCard())
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    drawDealerCardStep()
                 }
             } else {
-                checkWinner() // Proceed once dealer stops hitting
+                finishRoundIfAllHandsDone()
             }
         }
-        
-        
-        
-        private func updateScores() {
-            playerScore = calculateHand(playerHand) // Player still chooses Ace
-            dealerScore = calculateHand(dealerHand)
-            dealerVisibleScore = dealerHand.count > 0 ? calculateHand([dealerHand[0]]) : 0
-        }
-        
-        
-        private func promptForAceValue() -> Int {
-            DispatchQueue.main.async {
-                isAcePromptActive = true
+
+        /// Settles every player hand against the final dealer hand and updates diamonds once.
+        private func finishRoundIfAllHandsDone(forceDealerBlackjack: Bool = false) {
+            gameEnded = true
+            let dealerTotal = calculateHand(dealerHand)
+            let dealerHasBlackjack = forceDealerBlackjack || (dealerHand.count == 2 && dealerTotal == 21)
+            let dealerBusted = dealerTotal > 21
+
+            var totalPayout = 0
+            var results: [String] = []
+
+            for (i, hand) in hands.enumerated() {
+                let playerTotal = calculateHand(hand.cards)
+                let label = hands.count > 1 ? "Hand \(i + 1): " : ""
+
+                if hand.status == .busted {
+                    results.append("\(label)Bust ❌  (-\(hand.bet))")
+                    continue // no payout, bet already deducted
+                }
+
+                if hand.status == .blackjack {
+                    if dealerHasBlackjack {
+                        totalPayout += hand.bet
+                        results.append("\(label)Push (both Blackjack) 🤝")
+                    } else {
+                        let payout = Int(Double(hand.bet) * 2.5)
+                        totalPayout += payout
+                        results.append("\(label)Blackjack! 🎉  (+\(payout - hand.bet))")
+                    }
+                    continue
+                }
+
+                if dealerHasBlackjack {
+                    results.append("\(label)Dealer Blackjack 😞  (-\(hand.bet))")
+                    continue
+                }
+
+                if dealerBusted {
+                    let payout = hand.bet * 2
+                    totalPayout += payout
+                    results.append("\(label)Dealer Bust! 🎉  (+\(hand.bet))")
+                } else if playerTotal > dealerTotal {
+                    let payout = hand.bet * 2
+                    totalPayout += payout
+                    results.append("\(label)Win! 🎉  (+\(hand.bet))")
+                } else if playerTotal < dealerTotal {
+                    results.append("\(label)Lose 😞  (-\(hand.bet))")
+                } else {
+                    totalPayout += hand.bet
+                    results.append("\(label)Push 🤝")
+                }
             }
-            return aceChoice ?? 11 // Default to 11 if no input
+
+            diamonds += totalPayout
+            updateDiamondsInFirebase()
+
+            roundResults = results
+            gameStatus = "Round Over"
+            withAnimation {
+                showEndScreen = true
+            }
         }
-        
-        
+
+        // MARK: - Helpers
+
+        private func drawCard() -> Int {
+            Int.random(in: 1...13)
+        }
+
         private func calculateHand(_ hand: [Int]) -> Int {
             var total = 0
             var aceCount = 0
-            
             for card in hand {
                 if card == 1 {
                     aceCount += 1
@@ -813,105 +910,35 @@ struct BlackJackView: View {
                     total += min(card, 10)
                 }
             }
-            
-            // Handle aces optimally
             for _ in 0..<aceCount {
                 total += (total + 11 <= 21) ? 11 : 1
             }
-            
             return total
         }
-        
-        
+
         private func updateDiamondsInFirebase() {
             guard let userId = Auth.auth().currentUser?.uid else { return }
-            let userRef = Firestore.firestore().collection("users").document(userId)
-            
-            userRef.updateData(["diamonds": diamonds]) { error in
+            db.collection("users").document(userId).updateData(["diamonds": diamonds]) { error in
                 if let error = error {
                     print("Error updating diamonds: \(error.localizedDescription)")
-                } else {
-                    print("Diamonds successfully updated in Firebase!")
                 }
             }
         }
-        private func doubleDown() {
-            guard playerHands[currentHandIndex].count == 2 else { return }
-            
-            diamonds -= betAmount
-            splitBet += betAmount
-            updateDiamondsInFirebase()
-            
-            playerHands[currentHandIndex].append(drawCard())
-            updateScores()
-            stand()
-        }
-        
-        
-        
-        
-        private func checkWinner() {
-            gameEnded = true // Add this flag
-            let playerTotal = calculateHand(playerHands[currentHandIndex])
-            let dealerTotal = calculateHand(dealerHand)
-            print("Final Scores - Player: \(playerTotal), Dealer: \(dealerTotal)")
-            
-            // Reset diamonds change
-            var diamondsChange = 0
-            var resultMessage = ""
-            
-            // Check player bust first
-            if playerTotal > 21 {
-                resultMessage = "Bust! You Lose ❌"
-            }
-            // Check dealer bust
-            else if dealerTotal > 21 {
-                resultMessage = "Dealer Bust! You Win 🎉"
-                diamondsChange = betAmount * 2
-            }
-            // Compare scores
-            else {
-                if playerTotal > dealerTotal {
-                    resultMessage = "You Win! 🎉"
-                    diamondsChange = betAmount * 2
-                } else if playerTotal < dealerTotal {
-                    resultMessage = "Dealer Wins 😞"
-                } else {
-                    resultMessage = "Push! It's a Tie 🤝"
-                    diamondsChange = betAmount
-                }
-            }
-            
-            // Check for natural blackjack (only applies to initial 2 cards)
-            if playerHands[currentHandIndex].count == 2
-               && playerTotal == 21
-               && dealerTotal != 21 {
-                resultMessage = "Blackjack! You Win 🎉"
-                diamondsChange = Int(Double(betAmount) * 2.5)
-            }
-            
-            // Update game state
-            gameStatus = resultMessage
-            diamonds += diamondsChange
-            updateDiamondsInFirebase()
-            showEndScreen = true
-        }
-        
-        
+
         private func restartGame() {
             withAnimation {
                 showEndScreen = false
                 gameStarted = false
                 gameEnded = false
-                playerHand = []
-                splitHands = []
+                hands = []
+                currentHandIndex = 0
                 dealerHand = []
-                isSplitActive = false
-                dealerRevealed = false // Add this line
+                dealerRevealed = false
+                roundResults = []
                 gameStatus = "Place Your Bet"
             }
         }
-        
+
         private func changeBet(by amount: Int) {
             let newBet = betAmount + amount
             if newBet >= 10 && newBet <= diamonds {
