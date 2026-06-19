@@ -8,6 +8,7 @@ struct LikesView: View {
     @State private var likedUsers: [User] = []
     @State private var selectedUser: User? = nil
     @State private var isLoading = true
+    @State private var showFullDetail = false
 
     var body: some View {
         NavigationView {
@@ -70,7 +71,7 @@ struct LikesView: View {
             .fullScreenCover(item: $selectedUser) { user in
                 VStack {
                     HStack {
-                        Button(action: { selectedUser = nil }) {
+                        Button(action: { selectedUser = nil; showFullDetail = false }) {
                             Image(systemName: "chevron.backward")
                                 .font(.title2)
                                 .padding()
@@ -83,21 +84,17 @@ struct LikesView: View {
 
                     Spacer()
 
-                    UserCardView(
-                        user: user,
-                        onSkip: {
-                            skipUser(user)
-                            selectedUser = nil
-                        },
-                        onApprove: {
-                            approveUser(user)
-                            selectedUser = nil
+                    UserCardView(user: user, onInfoTapped: { showFullDetail = true })
+                        .frame(width: 350, height: 500)
+                        .cornerRadius(20)
+                        .shadow(radius: 10)
+                        .padding(.top, 30)
+                        .sheet(isPresented: $showFullDetail) {
+                            UserProfileDetailSheet(
+                                user: user,
+                                onDismiss: { showFullDetail = false }
+                            )
                         }
-                    )
-                    .frame(width: 350, height: 500)
-                    .cornerRadius(20)
-                    .shadow(radius: 10)
-                    .padding(.top, 30)
 
                     Spacer()
 
@@ -257,5 +254,3 @@ struct LikesView: View {
     }
 
 }
-
-

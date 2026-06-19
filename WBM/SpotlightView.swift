@@ -110,6 +110,7 @@ struct SpotlightView: View {
     @State private var ownSpotlightExpiresAt: Date?
     @State private var timeRemainingText: String = ""
     @State private var countdownTimer: Timer?
+    @State private var showFullDetail = false
 
     var body: some View {
         ZStack {
@@ -193,7 +194,7 @@ struct SpotlightView: View {
         .fullScreenCover(item: $selectedUser) { user in
             VStack {
                 HStack {
-                    Button(action: { selectedUser = nil }) {
+                    Button(action: { selectedUser = nil; showFullDetail = false }) {
                         Image(systemName: "chevron.backward")
                             .font(.title2)
                             .padding()
@@ -206,11 +207,17 @@ struct SpotlightView: View {
 
                 Spacer()
 
-                UserCardView(user: user)
+                UserCardView(user: user, onInfoTapped: { showFullDetail = true })
                     .frame(width: 350, height: 500)
                     .cornerRadius(20)
                     .shadow(radius: 10)
                     .padding(.top, 30)
+                    .sheet(isPresented: $showFullDetail) {
+                        UserProfileDetailSheet(
+                            user: user,
+                            onDismiss: { showFullDetail = false }
+                        )
+                    }
 
                 Spacer()
                 

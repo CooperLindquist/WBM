@@ -28,6 +28,9 @@
 		1ECA73282FDB6740007D2294 /* BlackJackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA730C2FDB6740007D2294 /* BlackJackView.swift */; };
 		1ECA73292FDB6740007D2294 /* LikesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA73122FDB6740007D2294 /* LikesView.swift */; };
 		1ECA732B2FDDCC69007D2294 /* Filters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA732A2FDDCC69007D2294 /* Filters.swift */; };
+		1ECA732F2FE5D684007D2294 /* UserCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA732E2FE5D684007D2294 /* UserCardView.swift */; };
+		1ECA73312FE5DB18007D2294 /* ProfileFeedCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA73302FE5DB18007D2294 /* ProfileFeedCardView.swift */; };
+		1ECA73332FE5DB3A007D2294 /* ProfileFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA73322FE5DB3A007D2294 /* ProfileFeedView.swift */; };
 		1ECDA42F2F686C5C00804FAD /* WBMStoreKit.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 1ECDA42E2F686C5C00804FAD /* WBMStoreKit.storekit */; };
 		1ECDA4312F68713E00804FAD /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECDA4302F68713E00804FAD /* StoreManager.swift */; };
 		DB12D4412D2E071900A4DA2B /* Utlities.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB12D4402D2E071900A4DA2B /* Utlities.swift */; };
@@ -78,6 +81,9 @@
 		1ECA73192FDB6740007D2294 /* StarsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StarsView.swift; sourceTree = "<group>"; };
 		1ECA731A2FDB6740007D2294 /* Start.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Start.swift; sourceTree = "<group>"; };
 		1ECA732A2FDDCC69007D2294 /* Filters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Filters.swift; sourceTree = "<group>"; };
+		1ECA732E2FE5D684007D2294 /* UserCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserCardView.swift; sourceTree = "<group>"; };
+		1ECA73302FE5DB18007D2294 /* ProfileFeedCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileFeedCardView.swift; sourceTree = "<group>"; };
+		1ECA73322FE5DB3A007D2294 /* ProfileFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileFeedView.swift; sourceTree = "<group>"; };
 		1ECDA42E2F686C5C00804FAD /* WBMStoreKit.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = WBMStoreKit.storekit; sourceTree = "<group>"; };
 		1ECDA4302F68713E00804FAD /* StoreManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreManager.swift; sourceTree = "<group>"; };
 		DB12D4402D2E071900A4DA2B /* Utlities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utlities.swift; sourceTree = "<group>"; };
@@ -160,6 +166,7 @@
 				DB12D4402D2E071900A4DA2B /* Utlities.swift */,
 				DB1F77A42D3C8DAD00DD6378 /* LocationManager.swift */,
 				1ECA730C2FDB6740007D2294 /* BlackJackView.swift */,
+				1ECA732E2FE5D684007D2294 /* UserCardView.swift */,
 				1ECA730D2FDB6740007D2294 /* ChatView.swift */,
 				1ECA732A2FDDCC69007D2294 /* Filters.swift */,
 				1ECA730E2FDB6740007D2294 /* DiamondStoreView.swift */,
@@ -167,6 +174,8 @@
 				1ECA73102FDB6740007D2294 /* HomePageView.swift */,
 				1ECA73112FDB6740007D2294 /* ImageCropperView.swift */,
 				1ECA73122FDB6740007D2294 /* LikesView.swift */,
+				1ECA73302FE5DB18007D2294 /* ProfileFeedCardView.swift */,
+				1ECA73322FE5DB3A007D2294 /* ProfileFeedView.swift */,
 				1ECA73132FDB6740007D2294 /* LoadingView.swift */,
 				1ECA73142FDB6740007D2294 /* MessagesView.swift */,
 				1ECA73152FDB6740007D2294 /* OnboardingView.swift */,
@@ -297,6 +306,7 @@
 				1ECA731D2FDB6740007D2294 /* MessagesView.swift in Sources */,
 				1ECA731E2FDB6740007D2294 /* EditProfileView.swift in Sources */,
 				1ECA731F2FDB6740007D2294 /* StarsView.swift in Sources */,
+				1ECA73332FE5DB3A007D2294 /* ProfileFeedView.swift in Sources */,
 				1ECA73202FDB6740007D2294 /* OnboardingView.swift in Sources */,
 				1ECA73212FDB6740007D2294 /* ChatView.swift in Sources */,
 				1ECA73222FDB6740007D2294 /* PremiumPromptView.swift in Sources */,
@@ -309,6 +319,7 @@
 				1ECA73282FDB6740007D2294 /* BlackJackView.swift in Sources */,
 				1ECA73292FDB6740007D2294 /* LikesView.swift in Sources */,
 				DB5554D62EF3A12C00ABAB24 /* PhotoManagerView.swift in Sources */,
+				1ECA73312FE5DB18007D2294 /* ProfileFeedCardView.swift in Sources */,
 				DB82876E2D28711100A3795D /* LanguageList.swift in Sources */,
 				DB12D4412D2E071900A4DA2B /* Utlities.swift in Sources */,
 				DB1F77A52D3C8DAD00DD6378 /* LocationManager.swift in Sources */,
@@ -317,6 +328,7 @@
 				DBB4E9732D2851D900C44E47 /* User.swift in Sources */,
 				1ECA72DB2FDA53D9007D2294 /* WBMApp.swift in Sources */,
 				1ECDA4312F68713E00804FAD /* StoreManager.swift in Sources */,
+				1ECA732F2FE5D684007D2294 /* UserCardView.swift in Sources */,
 				DBB4E98A2D285EDD00C44E47 /* SessionManager.swift in Sources */,
 				1ECA72DF2FDA5410007D2294 /* SwipeAlgorithm.swift in Sources */,
 			);

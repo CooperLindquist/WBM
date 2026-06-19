@@ -5,19 +5,14 @@ import FirebaseAuth
 
 struct HomePageView: View {
     @StateObject private var locationManager = LocationManager()
-    @State private var users: [User] = [] {
-        didSet {
-            withAnimation(.spring()) {}
-        }
-    }
-    @State private var lastSwipedUser: User?
+    @State private var users: [User] = []
+    @State private var currentIndex: Int = 0
     @State private var excludedUsers: Set<String> = []
     @State private var isLoading = true
     @State private var showFilterSheet = false
     @State private var filters: Filters = Filters.loadFilters()
     @State private var diamonds: Int = 0
     @State private var showDiamondStore = false
-    @State private var selectedUser: User? = nil
     
     var body: some View {
         ZStack {
@@ -51,68 +46,17 @@ struct HomePageView: View {
                 }
             }
             else {
-                VStack {
-                    Spacer()
-                    
-                    // Compact Card View
-                    ZStack {
-                        // 👀 Next card peeking
-                        if users.count > 1 {
-                            CompactUserCardView(
-                                user: users[users.count - 2],
-                                onInfoTapped: {},
-                                onSkip: {},
-                                onApprove: {}
-                            )
-                            .scaleEffect(0.95)
-                            .offset(y: 12)
-                        }
-
-                        // 👆 Top swipeable card
-                        if let currentUser = users.last {
-                            SwipeableUserCard(
-                                user: currentUser,
-                                canApprove: diamonds >= 10,
-                                onInfoTapped: { showDetailedView(for: currentUser) },
-                                onSkip: skipUser,
-                                onApprove: approveUser
-                            )
-
-                        }
-                    }
-                    .frame(width: UIScreen.main.bounds.width - 40)
-
-                    
-                    Spacer()
-                    
-                    // Action Buttons
-                    HStack(spacing: 30) {
-                        Button {
-                            undoSwipe()
-                        } label: {
-                            Image(systemName: "arrow.uturn.backward.circle.fill")
-                                .font(.system(size: 50))
-                                .foregroundColor(lastSwipedUser == nil ? .gray : .white)
-                        }
-                        .disabled(lastSwipedUser == nil)
-                        .opacity(lastSwipedUser == nil ? 0.4 : 1.0)
-
-
-                        Button(action: { skipUser() }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 70))
-                                .foregroundColor(.red)
-                        }
-                        
-                        Button(action: { approveUser() }) {
-                            Image(systemName: "heart.circle.fill")
-                                .font(.system(size: 70))
-                                .foregroundColor(.green)
-                        }
-                    }
-                    .offset(y: -30)
-                    .padding(.bottom, 20)
-                }
+                // Hinge-style scrollable profile feed. Each person's full profile
+                // scrolls vertically; swiping horizontally pages to the next person
+                // with a native page-turn animation.
+                ProfileFeedView(
+                    users: users,
+                    canApprove: diamonds >= 10,
+                    currentUserLocation: locationManager.userLocation,
+                    onApprove: { user in approveUser(user) },
+                    onSkip: { user in skipUser(user) },
+                    currentIndex: $currentIndex
+                )
             }
             
          
@@ -162,25 +106,17 @@ struct HomePageView: View {
         .sheet(isPresented: $showDiamondStore) {
             DiamondStoreView()
         }
-        .sheet(item: $selectedUser) { user in
-                    // Detailed User View
-                    UserDetailView(user: user)
-                }
         .onAppear {
             loadExcludedUsersAndFetchUsers()
         }
     }
-    private func showDetailedView(for user: User) {
-            selectedUser = user
-        }
-    
-    // Resets only people the user skipped or unliked — never touches matches,
+// Resets only people the user skipped or unliked — never touches matches,
     // since those are active conversations and shouldn't reappear in the swipe stack.
     private func resetSwipes() {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
         let userRef = Firestore.firestore().collection("users").document(currentUserID)
 
-        lastSwipedUser = nil
+        currentIndex = 0
         users.removeAll()
 
         // Delete every doc in the swipedUsers subcollection (skips)
@@ -322,41 +258,37 @@ struct HomePageView: View {
         showFilterSheet = false  // Close the filter sheet
     }
     
-    private func skipUser() {
-        guard !users.isEmpty else { return }
-        let skippedUser = users.removeLast()
-        lastSwipedUser = skippedUser
-        updateExcludedUsers(skippedUser.id)
+    /// Removes a person from the feed by id. Using id (not array position)
+    /// because in the page-feed model the user could be liked/passed from
+    /// any page, not just "the top of a stack."
+    private func removeFromFeed(_ user: User) {
+        guard let index = users.firstIndex(where: { $0.id == user.id }) else { return }
+        users.remove(at: index)
+        // Keep currentIndex in bounds so TabView doesn't point past the end
+        if currentIndex >= users.count {
+            currentIndex = max(0, users.count - 1)
+        }
         refetchIfNeeded()
     }
-    private func undoSwipe() {
-        guard let user = lastSwipedUser else { return }
 
-        // Prevent duplicates
-        if !users.contains(user) {
-            users.append(user)
-        }
-
-        lastSwipedUser = nil
-    }
-
-
-    
-    /// Silently fetch more users when stack is running low
+    /// Silently fetch more people when the feed is running low
     private func refetchIfNeeded() {
         guard users.count <= refetchThreshold, !isLoading else { return }
         fetchUsers()
     }
 
-    private func approveUser() {
-        guard !users.isEmpty else { return }
+    private func skipUser(_ user: User) {
+        updateExcludedUsers(user.id)
+        removeFromFeed(user)
+    }
+
+    private func approveUser(_ user: User) {
         guard diamonds >= 10 else { return } // Ensure the user has enough diamonds
-        let approvedUser = users.removeLast()
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
-        
+
         // Deduct 10 diamonds in the state immediately
         diamonds -= 10
-        
+
         // Update Firestore asynchronously
         Firestore.firestore().collection("users").document(currentUserID).updateData([
             "diamonds": diamonds
@@ -365,17 +297,17 @@ struct HomePageView: View {
                 print("Error deducting diamonds: \(error.localizedDescription)")
             }
         }
-        
-        Firestore.firestore().collection("users").document(approvedUser.id).updateData([
+
+        Firestore.firestore().collection("users").document(user.id).updateData([
             "likes": FieldValue.arrayUnion([currentUserID])
         ]) { error in
             if let error = error {
                 print("Error adding like: \(error.localizedDescription)")
             }
         }
-        
-        updateExcludedUsers(approvedUser.id)
-        refetchIfNeeded()
+
+        updateExcludedUsers(user.id)
+        removeFromFeed(user)
     }
 
     private func updateExcludedUsers(_ userID: String) {
@@ -397,386 +329,6 @@ struct HomePageView: View {
             }
     }
 }
-struct CompactUserCardView: View {
-    let user: User
-    var onInfoTapped: () -> Void
-    var onSkip: () -> Void
-    var onApprove: () -> Void
-    
-    @State private var currentImageIndex = 0
-    
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            // Main Image
-            GeometryReader { geo in
-                let width = geo.size.width
-                let height = width * 4 / 3   // ✅ 3:4 portrait ratio
-
-                if let imageUrl = user.imageURLs[safe: currentImageIndex] {
-                    WebImage(url: URL(string: imageUrl))
-                        .resizable()
-                        .aspectRatio(3/4, contentMode: .fill)
-                        .frame(width: width, height: height)
-                        .clipped()
-                        .onTapGesture { location in
-                            handleImageTap(location: location)
-                        }
-                }
-            }
-            .frame(height: UIScreen.main.bounds.width * 4 / 3)
-
-            
-            // Info Button
-            Button(action: onInfoTapped) {
-                Image(systemName: "info.circle.fill")
-                    .font(.title)
-                    .foregroundColor(.white)
-                    .padding(8)
-                    .background(Color.black.opacity(0.5))
-                    .clipShape(Circle())
-            }
-            .padding()
-            
-            // Bottom Info Overlay
-            VStack {
-                Spacer()
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(user.name)
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                        
-                        if let age = user.age {
-                            Text("\(age) years")
-                                .font(.subheadline)
-                                .foregroundColor(.white)
-                        }
-                    }
-                    Spacer()
-                }
-                .padding()
-                .background(
-                    LinearGradient(
-                        gradient: Gradient(colors: [Color.black.opacity(0.7), Color.clear]),
-                        startPoint: .bottom,
-                        endPoint: .top
-                    )
-                )
-            }
-            
-            // Image Indicators
-            VStack {
-                Spacer()
-                HStack(spacing: 6) {
-                    ForEach(user.imageURLs.indices, id: \.self) { index in
-                        Circle()
-                            .fill(index == currentImageIndex ? Color.white : Color.gray.opacity(0.7))
-                            .frame(width: 8, height: 8)
-                    }
-                }
-                .padding(.bottom, 10)
-            }
-        }
-        .cornerRadius(20)
-        .shadow(radius: 10)
-    }
-    
-    private func handleImageTap(location: CGPoint) {
-        let screenWidth = UIScreen.main.bounds.width * 0.9
-        if location.x < screenWidth / 2 {
-            // Tap left side - previous image
-            if currentImageIndex > 0 {
-                currentImageIndex -= 1
-            }
-        } else {
-            // Tap right side - next image
-            if currentImageIndex < user.imageURLs.count - 1 {
-                currentImageIndex += 1
-            }
-        }
-    }
-}
-
-// MARK: - Detailed User View
-struct UserDetailView: View {
-    let user: User
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                // Image Carousel
-                TabView {
-                    ForEach(user.imageURLs, id: \.self) { url in
-                        WebImage(url: URL(string: url))
-                            .resizable()
-                            .scaledToFill()
-                            .frame(height: 300)
-                            .clipped()
-                    }
-                }
-                .tabViewStyle(PageTabViewStyle())
-                .frame(height: 300)
-                .indexViewStyle(PageIndexViewStyle(backgroundDisplayMode: .always))
-                
-                // User Information
-                VStack(alignment: .leading, spacing: 16) {
-                    Text(user.name)
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                    
-                    if let age = user.age {
-                        DetailRow(icon: "calendar", text: "\(age) years")
-                    }
-                    
-                    if let gender = user.gender {
-                        DetailRow(icon: "person.fill", text: gender)
-                    }
-                    
-                    if let height = user.height, let formattedHeight = formatHeight(height) {
-                        DetailRow(icon: "ruler.fill", text: formattedHeight)
-                    }
-                    
-                    if let weight = user.weight {
-                        DetailRow(icon: "scalemass.fill", text: "\(weight) lbs")
-                    }
-                    
-                    if let languages = user.languages, !languages.isEmpty {
-                        DetailRow(icon: "globe", text: languages.joined(separator: ", "))
-                    }
-                    
-                    if let goal = user.relationshipGoal {
-                        DetailRow(icon: "heart.fill", text: goal)
-                    }
-                    
-                    if let bio = user.bio, !bio.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("About Me")
-                                .font(.headline)
-                            Text(bio)
-                                .font(.body)
-                        }
-                        .padding(.top, 10)
-                    }
-                }
-                .padding()
-                
-                Spacer()
-            }
-        }
-        .ignoresSafeArea(edges: .top)
-        .overlay(alignment: .topTrailing) {
-            Button(action: {
-                dismiss()
-            }) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title)
-                    .foregroundColor(.white)
-                    .padding()
-                    .background(Color.black.opacity(0.5))
-                    .clipShape(Circle())
-            }
-            .padding()
-        }
-    }
-    
-    private func formatHeight(_ height: String) -> String? {
-        guard let inches = Double(height) else { return nil }
-        let feet = Int(inches / 12)
-        let remainingInches = Int(inches.truncatingRemainder(dividingBy: 12))
-        return "\(feet)' \(remainingInches)\""
-    }
-}
-
-struct DetailRow: View {
-    let icon: String
-    let text: String
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .frame(width: 24)
-                .foregroundColor(.blue)
-            Text(text)
-                .font(.body)
-            Spacer()
-        }
-    }
-}
-
-
-struct UserCardView: View {
-    let user: User
-    var onSkip: (() -> Void)?
-    var onApprove: (() -> Void)?
-    
-    @State private var currentImageIndex = 0
-    @State private var showFullProfile = false
-    @State private var dragOffset = CGSize.zero
-    
-    var body: some View {
-        ZStack {
-            // Background Image
-            if let imageUrl = user.imageURLs[safe: currentImageIndex] {
-                WebImage(url: URL(string: imageUrl))
-                    .resizable()
-                    .scaledToFill()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-                    .overlay(
-                        LinearGradient(
-                            gradient: Gradient(colors: [Color.clear, Color.black.opacity(0.4)]),
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .contentShape(Rectangle())
-                    .gesture(
-                        DragGesture(minimumDistance: 20)
-                            .onChanged { value in
-                                self.dragOffset = value.translation
-                            }
-                            .onEnded { value in
-                                if value.translation.width < -100 {
-                                    showNextImage()
-                                } else if value.translation.width > 100 {
-                                    showPreviousImage()
-                                }
-                                self.dragOffset = .zero
-                            }
-                    )
-            }
-            
-            // Top Info Bar (always visible)
-            VStack {
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text(user.name)
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                            .shadow(radius: 3)
-                        
-                        if let age = user.age {
-                            Text("\(age) years old")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .shadow(radius: 2)
-                        }
-                    }
-                    
-                    Spacer()
-                    
-                    // Info Button to expand profile
-                    Button(action: {
-                        withAnimation(.spring()) {
-                            showFullProfile.toggle()
-                        }
-                    }) {
-                        Image(systemName: "info.circle.fill")
-                            .font(.system(size: 40))
-                            .foregroundColor(.white)
-                            .padding(10)
-                            .background(Color.black.opacity(0.6))
-                            .clipShape(Circle())
-                    }
-                }
-                .padding(.horizontal, 25)
-                .padding(.top, 50)
-                
-                Spacer()
-                
-                // Expanded Profile Details (slides up when active)
-                if showFullProfile {
-                    VStack(alignment: .leading, spacing: 15) {
-                        // Close button
-                        HStack {
-                            Spacer()
-                            Button(action: {
-                                withAnimation(.spring()) {
-                                    showFullProfile = false
-                                }
-                            }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.title)
-                                    .foregroundColor(.white)
-                            }
-                        }
-                        .padding(.bottom, 10)
-                        
-                        // User details
-                        DetailRow(icon: "person.fill", text: user.gender ?? "Not specified")
-                        
-                        if let height = user.height {
-                            DetailRow(icon: "ruler", text: "\(height) inches")
-                        }
-                        
-                        if let weight = user.weight {
-                            DetailRow(icon: "scalemass", text: "\(weight) lbs")
-                        }
-                        
-                        if let goal = user.relationshipGoal {
-                            DetailRow(icon: "heart.fill", text: goal)
-                        }
-                        
-                        if let languages = user.languages, !languages.isEmpty {
-                            DetailRow(icon: "globe", text: languages.joined(separator: ", "))
-                        }
-                        
-                        if let bio = user.bio {
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text("About Me")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                                Text(bio)
-                                    .foregroundColor(.white)
-                                    .font(.body)
-                            }
-                            .padding(.top, 10)
-                        }
-                    }
-                    .padding(25)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(Color.black.opacity(0.7))
-                    )
-                    .transition(.move(edge: .bottom))
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 30)
-                } else {
-                    // Image indicators at bottom when not expanded
-                    if user.imageURLs.count > 1 {
-                        HStack {
-                            ForEach(user.imageURLs.indices, id: \.self) { index in
-                                Circle()
-                                    .fill(index == currentImageIndex ? Color.white : Color.gray.opacity(0.7))
-                                    .frame(width: 8, height: 8)
-                            }
-                        }
-                        .padding(.bottom, 30)
-                    }
-                }
-            }
-        }
-        .ignoresSafeArea()
-    }
-    
-    private func showNextImage() {
-        withAnimation {
-            currentImageIndex = min(currentImageIndex + 1, user.imageURLs.count - 1)
-        }
-    }
-    
-    private func showPreviousImage() {
-        withAnimation {
-            currentImageIndex = max(currentImageIndex - 1, 0)
-        }
-    }
-}
-
-
-
 extension Collection {
     subscript(safe index: Index) -> Element? {
         return indices.contains(index) ? self[index] : nil
