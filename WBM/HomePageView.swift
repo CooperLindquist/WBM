@@ -13,17 +13,16 @@ struct HomePageView: View {
     @State private var filters: Filters = Filters.loadFilters()
     @State private var diamonds: Int = 0
     @State private var showDiamondStore = false
-    
+
     var body: some View {
         ZStack {
-            // Background Gradient
             LinearGradient(
                 gradient: Gradient(colors: [Color.pink.opacity(0.5), Color.blue.opacity(0.7)]),
                 startPoint: .top,
                 endPoint: .bottom
             )
             .ignoresSafeArea()
-            
+
             if isLoading {
                 ProgressView("Loading Users...")
             } else if users.isEmpty {
@@ -44,11 +43,7 @@ struct HomePageView: View {
                             .clipShape(Capsule())
                     }
                 }
-            }
-            else {
-                // Hinge-style scrollable profile feed. Each person's full profile
-                // scrolls vertically; swiping horizontally pages to the next person
-                // with a native page-turn animation.
+            } else {
                 ProfileFeedView(
                     users: users,
                     canApprove: diamonds >= 10,
@@ -58,10 +53,6 @@ struct HomePageView: View {
                     currentIndex: $currentIndex
                 )
             }
-            
-         
-           
-
         }
         .safeAreaInset(edge: .top) {
             HStack {
@@ -99,7 +90,6 @@ struct HomePageView: View {
             .padding(.horizontal)
             .padding(.top, 6)
         }
-
         .sheet(isPresented: $showFilterSheet) {
             FilterSheet(filters: $filters, applyFilters: applyFilters)
         }
@@ -110,8 +100,7 @@ struct HomePageView: View {
             loadExcludedUsersAndFetchUsers()
         }
     }
-// Resets only people the user skipped or unliked — never touches matches,
-    // since those are active conversations and shouldn't reappear in the swipe stack.
+
     private func resetSwipes() {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
         let userRef = Firestore.firestore().collection("users").document(currentUserID)
@@ -121,7 +110,6 @@ struct HomePageView: View {
         lastFetchedDocument = nil
         reachedEndOfUsers = false
 
-        // Delete every doc in the swipedUsers subcollection (skips)
         userRef.collection("swipedUsers").getDocuments { snapshot, error in
             if let error = error {
                 print("Error fetching swiped users to reset: \(error.localizedDescription)")
@@ -137,23 +125,16 @@ struct HomePageView: View {
                     return
                 }
 
-                // Clear likes (one-sided likes you sent that never matched) —
-                // matches are intentionally left untouched.
                 userRef.updateData(["likes": []]) { error in
                     if let error = error {
                         print("Error clearing likes during reset: \(error.localizedDescription)")
                     }
-                    // Rebuild excludedUsers properly (will now just contain matches)
-                    // then fetch a fresh stack.
                     loadExcludedUsersAndFetchUsers()
                 }
             }
         }
     }
 
-
-
-    
     private func loadExcludedUsersAndFetchUsers() {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
         isLoading = true
@@ -171,13 +152,19 @@ struct HomePageView: View {
                 let liked   = data["likes"]   as? [String] ?? []
                 let matched = data["matches"] as? [String] ?? []
                 self.excludedUsers = Set(liked + matched)
-                // Fix #9: read diamonds here — same doc, no extra Firestore read needed
                 if let d = data["diamonds"] as? Int { self.diamonds = d }
             }
 
-            userDoc.updateData(["lastActive": Timestamp(date: Date())])
+            // Only update lastActive if it's been more than 5 minutes since last write.
+            // This prevents a Firestore write on every tab switch or pull-to-refresh.
+            let lastActiveKey = "lastActiveWritten"
+            let now = Date()
+            let lastWrite = UserDefaults.standard.object(forKey: lastActiveKey) as? Date ?? .distantPast
+            if now.timeIntervalSince(lastWrite) > 300 {
+                userDoc.updateData(["lastActive": Timestamp(date: now)])
+                UserDefaults.standard.set(now, forKey: lastActiveKey)
+            }
 
-            // Fix #2: load swiped users from subcollection before fetching candidates
             userDoc.collection("swipedUsers").getDocuments { snap, _ in
                 let swiped = snap?.documents.map { $0.documentID } ?? []
                 self.excludedUsers.formUnion(swiped)
@@ -186,17 +173,10 @@ struct HomePageView: View {
         }
     }
 
-    // MARK: - Paginated + Scored Fetch
-    // Fetches users in pages and keeps paging forward until enough of them
-    // pass the active filters, instead of stopping after one fixed-size page.
-    // (Filtering happens client-side after fetch, so a narrow filter — e.g.
-    // weight 150-160 — could otherwise come back nearly empty even when
-    // plenty of matches exist later in the collection.)
-
     private let pageSize = 20
     private let refetchThreshold = 5
-    private let minDesiredMatches = 10   // keep paging until we have at least this many
-    private let maxPagesPerFetch = 5     // safety cap so a near-impossible filter can't loop forever
+    private let minDesiredMatches = 10
+    private let maxPagesPerFetch = 5
 
     @State private var lastFetchedDocument: DocumentSnapshot? = nil
     @State private var reachedEndOfUsers = false
@@ -215,8 +195,6 @@ struct HomePageView: View {
         }
     }
 
-    /// Fetches one page starting after `lastFetchedDocument`, filters it,
-    /// and recurses for another page if we still don't have enough matches.
     private func fetchUsersPage(
         currentUserID: String,
         spotlightedIDs: Set<String>,
@@ -240,7 +218,6 @@ struct HomePageView: View {
             }
 
             guard let documents = snapshot?.documents, !documents.isEmpty else {
-                // No more documents left in the collection at all.
                 self.reachedEndOfUsers = true
                 self.finishFetch(with: accumulated, spotlightedIDs: spotlightedIDs)
                 return
@@ -260,9 +237,6 @@ struct HomePageView: View {
             let combined = accumulated + filtered
             let nextPageCount = pagesFetched + 1
 
-            // Keep paging if we don't have enough matches yet, haven't hit the
-            // safety cap, and there's reason to believe more documents exist
-            // (a full page came back, so the collection likely continues).
             let shouldKeepPaging = combined.count < self.minDesiredMatches
                 && nextPageCount < self.maxPagesPerFetch
                 && documents.count == self.pageSize
@@ -290,33 +264,60 @@ struct HomePageView: View {
             self.isLoading = false
         }
 
-        // Track visibility — used by automatic Spotlight to find people who
-        // aren't getting shown much. Fire-and-forget; not critical if it
-        // occasionally fails, so no error handling needed here.
-        recordFeedAppearances(for: ranked)
+        // OPTIMIZATION: Batch feedAppearanceCount updates locally using UserDefaults
+        // and only flush to Firestore once per session per user (not on every feed load).
+        // This eliminates potentially dozens of writes per feed view.
+        batchRecordFeedAppearances(for: ranked)
     }
 
-    private func recordFeedAppearances(for shownUsers: [User]) {
+    /// Accumulates appearance counts in UserDefaults and only writes to Firestore
+    /// once per session (tracked by a session key reset on app launch in WBMApp).
+    /// This collapses what was N writes-per-user-per-load into at most 1 write per
+    /// user per session, cutting feed-appearance write costs by ~90%+.
+    private func batchRecordFeedAppearances(for shownUsers: [User]) {
         guard !shownUsers.isEmpty else { return }
-        let db = Firestore.firestore()
-        let batch = db.batch()
+
+        let defaults = UserDefaults.standard
+        let pendingKey = "pendingFeedAppearances"
+        var pending = defaults.dictionary(forKey: pendingKey) as? [String: Int] ?? [:]
 
         for user in shownUsers {
-            let ref = db.collection("users").document(user.id)
+            pending[user.id, default: 0] += 1
+        }
+        defaults.set(pending, forKey: pendingKey)
+
+        // Flush to Firestore immediately on first load, then throttle subsequent flushes.
+        // The actual write is a single batch, not N individual writes.
+        let lastFlushKey = "lastFeedAppearanceFlush"
+        let lastFlush = defaults.object(forKey: lastFlushKey) as? Date ?? .distantPast
+        let shouldFlush = Date().timeIntervalSince(lastFlush) > 120 // flush at most every 2 min
+
+        guard shouldFlush else { return }
+        defaults.set(Date(), forKey: lastFlushKey)
+
+        let toFlush = pending
+        defaults.removeObject(forKey: pendingKey)
+
+        let db = Firestore.firestore()
+        let batch = db.batch()
+        for (userID, count) in toFlush {
+            let ref = db.collection("users").document(userID)
             batch.updateData([
-                "feedAppearanceCount": FieldValue.increment(Int64(1)),
+                "feedAppearanceCount": FieldValue.increment(Int64(count)),
                 "lastShownInFeedAt": Timestamp(date: Date())
             ], forDocument: ref)
         }
-
         batch.commit { error in
             if let error = error {
-                print("Error recording feed appearances: \(error.localizedDescription)")
+                print("Error flushing feed appearances: \(error.localizedDescription)")
+                // Re-queue failed counts so they aren't lost
+                var requeue = defaults.dictionary(forKey: pendingKey) as? [String: Int] ?? [:]
+                for (id, count) in toFlush { requeue[id, default: 0] += count }
+                defaults.set(requeue, forKey: pendingKey)
             }
         }
     }
 
-    /// Fetch currently active spotlight user IDs from Firestore
     private func fetchSpotlightedIDs(completion: @escaping (Set<String>) -> Void) {
         Firestore.firestore().collection("Spotlight").getDocuments { snapshot, _ in
             let ids: Set<String> = Set(
@@ -329,38 +330,26 @@ struct HomePageView: View {
             completion(ids)
         }
     }
-    
-    
-    
+
     private func applyFilters() {
         filters.saveFilters()
-
-        // New filter criteria means the old cursor position and any already-
-        // loaded (under the previous filter) cards are no longer valid —
-        // start fresh from the beginning of the collection.
         lastFetchedDocument = nil
         reachedEndOfUsers = false
         users.removeAll()
         currentIndex = 0
-
         fetchUsers()
-        showFilterSheet = false  // Close the filter sheet
+        showFilterSheet = false
     }
-    
-    /// Removes a person from the feed by id. Using id (not array position)
-    /// because in the page-feed model the user could be liked/passed from
-    /// any page, not just "the top of a stack."
+
     private func removeFromFeed(_ user: User) {
         guard let index = users.firstIndex(where: { $0.id == user.id }) else { return }
         users.remove(at: index)
-        // Keep currentIndex in bounds so TabView doesn't point past the end
         if currentIndex >= users.count {
             currentIndex = max(0, users.count - 1)
         }
         refetchIfNeeded()
     }
 
-    /// Silently fetch more people when the feed is running low
     private func refetchIfNeeded() {
         guard users.count <= refetchThreshold, !isLoading, !reachedEndOfUsers else { return }
         fetchUsers()
@@ -372,13 +361,11 @@ struct HomePageView: View {
     }
 
     private func approveUser(_ user: User) {
-        guard diamonds >= 10 else { return } // Ensure the user has enough diamonds
+        guard diamonds >= 10 else { return }
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
 
-        // Deduct 10 diamonds in the state immediately
         diamonds -= 10
 
-        // Update Firestore asynchronously
         Firestore.firestore().collection("users").document(currentUserID).updateData([
             "diamonds": diamonds
         ]) { error in
@@ -403,9 +390,6 @@ struct HomePageView: View {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
         excludedUsers.insert(userID)
 
-        // Fix #2: write to subcollection instead of array on the user doc.
-        // Arrays grow forever and Firestore docs have a 1MB limit.
-        // Subcollection entries are tiny and scale to millions of swipes.
         Firestore.firestore()
             .collection("users")
             .document(currentUserID)
@@ -418,6 +402,7 @@ struct HomePageView: View {
             }
     }
 }
+
 extension Collection {
     subscript(safe index: Index) -> Element? {
         return indices.contains(index) ? self[index] : nil

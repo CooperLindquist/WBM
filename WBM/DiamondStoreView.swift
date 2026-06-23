@@ -5,9 +5,6 @@ import FirebaseAuth
 import FirebaseFirestore
 
 // MARK: - IAP Coordinator
-// Uses SKPayment (StoreKit 1) to avoid the Product naming conflict with Firestore.
-// Handles purchase callbacks via delegate and calls back into the view via closures.
-
 class IAPCoordinator: NSObject, SKProductsRequestDelegate, SKPaymentTransactionObserver {
 
     static let shared = IAPCoordinator()
@@ -31,18 +28,15 @@ class IAPCoordinator: NSObject, SKProductsRequestDelegate, SKPaymentTransactionO
         if let product = products.first(where: { $0.productIdentifier == productID }) {
             SKPaymentQueue.default().add(SKPayment(product: product))
         } else {
-            // Products not loaded yet — fetch then buy
             fetchProducts(productIDs: [productID])
             onPurchaseFailed?(nil)
         }
     }
 
-    // SKProductsRequestDelegate
     func productsRequest(_ request: SKProductsRequest, didReceive response: SKProductsResponse) {
         products = response.products
     }
 
-    // SKPaymentTransactionObserver
     func paymentQueue(_ queue: SKPaymentQueue, updatedTransactions transactions: [SKPaymentTransaction]) {
         for transaction in transactions {
             switch transaction.transactionState {
@@ -59,16 +53,50 @@ class IAPCoordinator: NSObject, SKProductsRequestDelegate, SKPaymentTransactionO
     }
 }
 
+// MARK: - Ad Load State
+enum AdLoadState {
+    case loading
+    case ready
+    case failed
+}
+
+// MARK: - Rewarded Ad Delegate
+// GADFullScreenContentDelegate is the correct modern way to receive ad events.
+// We use a class (not a struct) because GMA SDK holds a weak reference to the delegate.
+class RewardedAdDelegate: NSObject, GADFullScreenContentDelegate {
+    private let onReward: () -> Void
+    private let onDismiss: (() -> Void)?
+
+    init(onReward: @escaping () -> Void, onDismiss: (() -> Void)? = nil) {
+        self.onReward = onReward
+        self.onDismiss = onDismiss
+    }
+
+    func adDidDismissFullScreenContent(_ ad: GADFullScreenPresentingAd) {
+        onDismiss?()
+    }
+
+    func ad(_ ad: GADFullScreenPresentingAd, didFailToPresentFullScreenContentWithError error: Error) {
+        print("RewardedAd failed to present: \(error.localizedDescription)")
+    }
+}
+
 // MARK: - Diamond Store View
 
 struct DiamondStoreView: View {
 
     @State private var diamonds = 0
     @State private var rewardedAd: GADRewardedAd?
+    @State private var adDelegate: RewardedAdDelegate?   // retain delegate for ad lifetime
+    @State private var adState: AdLoadState = .loading
+    @State private var adRetryCount = 0
     @State private var navigateToBlackjack = false
     @State private var purchaseError: String? = nil
     @State private var showError = false
     @State private var diamondListener: ListenerRegistration?
+
+    private let maxAdRetries = 3
+    private let retryDelays: [Double] = [2, 4, 8]
 
     let packs: [DiamondPack] = [
         DiamondPack(id: 1, imageName: "bag.circle.fill", price: "$0.99",  amount: 100,   productID: "wbm_100_diamonds"),
@@ -127,7 +155,7 @@ struct DiamondStoreView: View {
         }
         .onAppear {
             loadRewardedAd()
-            startDiamondListener() // Fix #8: live listener instead of one-time fetch
+            startDiamondListener()
             setupIAP()
         }
         .onDisappear {
@@ -180,21 +208,43 @@ struct DiamondStoreView: View {
 
             Spacer()
 
-            Button { showRewardedAd() } label: {
-                Text(rewardedAd == nil ? "Loading..." : "Watch")
+            Button {
+                switch adState {
+                case .ready:   showRewardedAd()
+                case .failed:  retryAdLoad()
+                case .loading: break
+                }
+            } label: {
+                Text(adButtonLabel)
                     .font(.headline)
                     .foregroundColor(.white)
                     .padding(.vertical, 10)
                     .padding(.horizontal, 15)
-                    .background(rewardedAd == nil ? Color.gray : Color.blue)
+                    .background(adButtonColor)
                     .cornerRadius(8)
             }
-            .disabled(rewardedAd == nil)
+            .disabled(adState == .loading)
         }
         .padding()
         .background(Color.black.opacity(0.8))
         .cornerRadius(15)
         .padding(.horizontal)
+    }
+
+    private var adButtonLabel: String {
+        switch adState {
+        case .loading: return "Loading..."
+        case .ready:   return "Watch"
+        case .failed:  return "Retry"
+        }
+    }
+
+    private var adButtonColor: Color {
+        switch adState {
+        case .loading: return .gray
+        case .ready:   return .blue
+        case .failed:  return .orange
+        }
     }
 
     // MARK: - Premium Section
@@ -276,8 +326,6 @@ struct DiamondStoreView: View {
 
     func startDiamondListener() {
         guard let uid = Auth.auth().currentUser?.uid else { return }
-        // Fix #8: snapshot listener keeps diamond count live — if user earns diamonds
-        // in blackjack or another screen, the count here updates automatically
         diamondListener = Firestore.firestore().collection("users").document(uid)
             .addSnapshotListener { doc, _ in
                 DispatchQueue.main.async {
@@ -289,34 +337,113 @@ struct DiamondStoreView: View {
     // MARK: - Ads
 
     func loadRewardedAd() {
+        adRetryCount = 0
+        adState = .loading
+        attemptAdLoad()
+    }
+
+    private func retryAdLoad() {
+        adRetryCount = 0
+        adState = .loading
+        attemptAdLoad()
+    }
+
+    private func attemptAdLoad() {
         GADRewardedAd.load(
             withAdUnitID: "ca-app-pub-3940256099942544/5224354917",
             request: GADRequest()
         ) { ad, error in
             DispatchQueue.main.async {
-                if let error = error {
-                    print("Ad load failed: \(error.localizedDescription)")
+                if let ad = ad {
+                    rewardedAd = ad
+                    adState = .ready
+                    adRetryCount = 0
                     return
                 }
-                rewardedAd = ad
+
+                print("Ad load failed (attempt \(adRetryCount + 1)): \(error?.localizedDescription ?? "unknown")")
+
+                if adRetryCount < maxAdRetries {
+                    let delay = retryDelays[min(adRetryCount, retryDelays.count - 1)]
+                    adRetryCount += 1
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                        attemptAdLoad()
+                    }
+                } else {
+                    adState = .failed
+                }
             }
         }
     }
 
+    // MARK: - Show Rewarded Ad (FIXED)
+
+    /// Walks the VC hierarchy to find the topmost presented controller.
+    /// GMA requires you present from the VC that is currently on top —
+    /// passing a VC that is already presenting something else causes the
+    /// "already presenting another view controller" error.
+    private func topmostViewController(_ base: UIViewController) -> UIViewController {
+        if let presented = base.presentedViewController {
+            return topmostViewController(presented)
+        }
+        if let nav = base as? UINavigationController, let visible = nav.visibleViewController {
+            return topmostViewController(visible)
+        }
+        if let tab = base as? UITabBarController, let selected = tab.selectedViewController {
+            return topmostViewController(selected)
+        }
+        return base
+    }
+
     func showRewardedAd() {
-        guard let ad = rewardedAd else { return }
-        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let rootVC = windowScene.windows.first?.rootViewController else { return }
+        guard let ad = rewardedAd else {
+            print("showRewardedAd: no ad loaded")
+            return
+        }
 
+        guard let windowScene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .first(where: { $0.activationState == .foregroundActive }),
+              let root = windowScene.keyWindow?.rootViewController else {
+            print("showRewardedAd: could not resolve rootViewController")
+            return
+        }
+        // Walk up to the topmost VC so GMA does not complain about an already-presenting VC
+        let rootVC = topmostViewController(root)
+
+        // FIX 2: Use GADFullScreenContentDelegate to receive reward callbacks.
+        // The old trailing-closure pattern (ad.present { reward }) no longer reliably fires.
+        let delegate = RewardedAdDelegate(
+            onReward: {
+                guard let uid = Auth.auth().currentUser?.uid else { return }
+                Firestore.firestore().collection("users").document(uid)
+                    .updateData(["diamonds": FieldValue.increment(Int64(75))])
+                DispatchQueue.main.async {
+                    diamonds += 75
+                }
+            },
+            onDismiss: {
+                DispatchQueue.main.async {
+                    rewardedAd = nil
+                    adDelegate = nil
+                    loadRewardedAd() // pre-load next ad after dismissal
+                }
+            }
+        )
+
+        // Retain delegate — GMA SDK holds only a weak reference
+        adDelegate = delegate
+        ad.fullScreenContentDelegate = delegate
+
+        // FIX 3: userDidEarnRewardHandler is the correct modern present API.
+        // Pass the reward logic here; GMA calls this closure when the user earns the reward.
         ad.present(fromRootViewController: rootVC) {
-            rewardedAd = nil
-            loadRewardedAd()
-
+            let rewardAmount = ad.adReward.amount.int64Value
             guard let uid = Auth.auth().currentUser?.uid else { return }
             Firestore.firestore().collection("users").document(uid)
-                .updateData(["diamonds": FieldValue.increment(Int64(75))])
+                .updateData(["diamonds": FieldValue.increment(rewardAmount)])
             DispatchQueue.main.async {
-                diamonds += 75
+                diamonds += Int(rewardAmount)
             }
         }
     }

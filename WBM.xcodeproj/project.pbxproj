@@ -40,7 +40,6 @@
 		1ECA73432FE77CF3007D2294 /* AutoSpotlight.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA73422FE77CF3007D2294 /* AutoSpotlight.swift */; };
 		1ECA73472FE9FA56007D2294 /* MatchProfileCover.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA73462FE9FA56007D2294 /* MatchProfileCover.swift */; };
 		1ECDA42F2F686C5C00804FAD /* WBMStoreKit.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 1ECDA42E2F686C5C00804FAD /* WBMStoreKit.storekit */; };
-		1ECDA4312F68713E00804FAD /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECDA4302F68713E00804FAD /* StoreManager.swift */; };
 		DB12D4412D2E071900A4DA2B /* Utlities.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB12D4402D2E071900A4DA2B /* Utlities.swift */; };
 		DB1F77A52D3C8DAD00DD6378 /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB1F77A42D3C8DAD00DD6378 /* LocationManager.swift */; };
 		DB5554D42EF3A11000ABAB24 /* SwipeableUserCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB5554D32EF3A11000ABAB24 /* SwipeableUserCard.swift */; };
@@ -60,7 +59,6 @@
 		DBB4E96E2D2850D500C44E47 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = DBB4E96D2D2850D500C44E47 /* FirebaseDatabase */; };
 		DBB4E9702D2850D500C44E47 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = DBB4E96F2D2850D500C44E47 /* FirebaseFirestore */; };
 		DBB4E9732D2851D900C44E47 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBB4E9712D2851D900C44E47 /* User.swift */; };
-		DBB4E9742D2851D900C44E47 /* userViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBB4E9722D2851D900C44E47 /* userViewModel.swift */; };
 		DBB4E9772D2853DE00C44E47 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = DBB4E9762D2853DE00C44E47 /* GoogleSignIn */; };
 		DBB4E9792D2853DE00C44E47 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = DBB4E9782D2853DE00C44E47 /* GoogleSignInSwift */; };
 		DBB4E97B2D28550D00C44E47 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = DBB4E97A2D28550D00C44E47 /* GoogleService-Info.plist */; };
@@ -101,7 +99,6 @@
 		1ECA73422FE77CF3007D2294 /* AutoSpotlight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoSpotlight.swift; sourceTree = "<group>"; };
 		1ECA73462FE9FA56007D2294 /* MatchProfileCover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchProfileCover.swift; sourceTree = "<group>"; };
 		1ECDA42E2F686C5C00804FAD /* WBMStoreKit.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = WBMStoreKit.storekit; sourceTree = "<group>"; };
-		1ECDA4302F68713E00804FAD /* StoreManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreManager.swift; sourceTree = "<group>"; };
 		DB12D4402D2E071900A4DA2B /* Utlities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utlities.swift; sourceTree = "<group>"; };
 		DB1F77A42D3C8DAD00DD6378 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
 		DB5554D32EF3A11000ABAB24 /* SwipeableUserCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeableUserCard.swift; sourceTree = "<group>"; };
@@ -113,7 +110,6 @@
 		DBB4E95A2D28508500C44E47 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DBB4E95D2D28508500C44E47 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		DBB4E9712D2851D900C44E47 /* User.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
-		DBB4E9722D2851D900C44E47 /* userViewModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = userViewModel.swift; sourceTree = "<group>"; };
 		DBB4E97A2D28550D00C44E47 /* GoogleService-Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		DBB4E97C2D28553000C44E47 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		DBB4E9892D285EDD00C44E47 /* SessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionManager.swift; sourceTree = "<group>"; };
@@ -178,7 +174,6 @@
 				1ECA72D52FDA5192007D2294 /* TabBarView.swift */,
 				1ECA72CA2FDA50DA007D2294 /* NotificationManager.swift */,
 				1ECDA42E2F686C5C00804FAD /* WBMStoreKit.storekit */,
-				1ECDA4302F68713E00804FAD /* StoreManager.swift */,
 				DB12D4402D2E071900A4DA2B /* Utlities.swift */,
 				DB1F77A42D3C8DAD00DD6378 /* LocationManager.swift */,
 				1ECA73342FE63914007D2294 /* ProfilePreviewTile.swift */,
@@ -212,7 +207,6 @@
 				DB82876D2D28711100A3795D /* LanguageList.swift */,
 				DBB4E9892D285EDD00C44E47 /* SessionManager.swift */,
 				DBB4E9712D2851D900C44E47 /* User.swift */,
-				DBB4E9722D2851D900C44E47 /* userViewModel.swift */,
 				DBB4E95A2D28508500C44E47 /* Assets.xcassets */,
 				DBB4E97A2D28550D00C44E47 /* GoogleService-Info.plist */,
 				DBB4E95C2D28508500C44E47 /* Preview Content */,
@@ -323,7 +317,6 @@
 				1ECA72E72FDB617B007D2294 /* RateUserView.swift in Sources */,
 				DB8287732D28775100A3795D /* ImagePicker.swift in Sources */,
 				1ECA72D92FDA5192007D2294 /* TabBarView.swift in Sources */,
-				DBB4E9742D2851D900C44E47 /* userViewModel.swift in Sources */,
 				DB5554D42EF3A11000ABAB24 /* SwipeableUserCard.swift in Sources */,
 				1ECA731B2FDB6740007D2294 /* Start.swift in Sources */,
 				1ECA731C2FDB6740007D2294 /* ImageCropperView.swift in Sources */,
@@ -359,7 +352,6 @@
 				1ECA72CE2FDA50DB007D2294 /* NotificationManager.swift in Sources */,
 				DBB4E9732D2851D900C44E47 /* User.swift in Sources */,
 				1ECA72DB2FDA53D9007D2294 /* WBMApp.swift in Sources */,
-				1ECDA4312F68713E00804FAD /* StoreManager.swift in Sources */,
 				1ECA732F2FE5D684007D2294 /* UserCardView.swift in Sources */,
 				DBB4E98A2D285EDD00C44E47 /* SessionManager.swift in Sources */,
 				1ECA72DF2FDA5410007D2294 /* SwipeAlgorithm.swift in Sources */,

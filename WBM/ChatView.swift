@@ -8,10 +8,16 @@ struct ChatView: View {
     @State private var messages: [Message] = []
     @State private var newMessage: String = ""
     @State private var listener: ListenerRegistration? = nil
+    @State private var typingListener: ListenerRegistration? = nil
     @State private var showingRateUserView = false
     @State private var showingProfile = false
-    @State private var isTyping: Bool = false
+    @State private var isPartnerTyping: Bool = false
     @State private var typingText: String = ""
+
+    // Throttle typing-status writes so we don't hammer Firestore on every keystroke.
+    // One write when the user starts typing, one when they stop — not one per character.
+    @State private var typingDebounceTask: DispatchWorkItem? = nil
+    @State private var currentlyReportedTyping: Bool = false
 
     var body: some View {
         ZStack {
@@ -47,8 +53,7 @@ struct ChatView: View {
                             }
                         }
 
-                        // Typing Indicator
-                        if isTyping {
+                        if isPartnerTyping {
                             HStack {
                                 Spacer()
                                 Text(typingText)
@@ -121,26 +126,54 @@ struct ChatView: View {
         }
         .onAppear {
             fetchMessages()
+            listenForTyping()
             markLatestMessageRead()
         }
         .onDisappear {
             listener?.remove()
-            updateTypingStatus(isTyping: false)
+            typingListener?.remove()
+            // Make sure we clear the typing flag when leaving
+            if currentlyReportedTyping {
+                writeTypingStatus(isTyping: false)
+            }
         }
-        .onChange(of: newMessage) { _ in
-            updateTypingStatus(isTyping: true) // Update typing status when the user types
-        }
-        .onChange(of: isTyping) { _ in
-            listenForTyping()
+        .onChange(of: newMessage) { value in
+            handleTypingChange(hasText: !value.isEmpty)
         }
     }
 
-    private func updateTypingStatus(isTyping: Bool) {
+    // MARK: - Typing throttle
+
+    /// Debounced typing status: write "typing=true" immediately when the user starts,
+    /// then write "typing=false" 2 seconds after they stop. This turns O(N keystrokes)
+    /// Firestore writes into at most 2 writes per burst of typing.
+    private func handleTypingChange(hasText: Bool) {
+        typingDebounceTask?.cancel()
+
+        if hasText && !currentlyReportedTyping {
+            currentlyReportedTyping = true
+            writeTypingStatus(isTyping: true)
+        }
+
+        if hasText {
+            // Schedule a "stopped typing" write 2s after the last keystroke
+            let task = DispatchWorkItem {
+                currentlyReportedTyping = false
+                writeTypingStatus(isTyping: false)
+            }
+            typingDebounceTask = task
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: task)
+        } else if currentlyReportedTyping {
+            currentlyReportedTyping = false
+            writeTypingStatus(isTyping: false)
+        }
+    }
+
+    private func writeTypingStatus(isTyping: Bool) {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
         let chatID = generateChatID(user1: currentUserID, user2: chatPartner.id)
-
         Firestore.firestore().collection("chats").document(chatID).setData([
-            "typing": isTyping ? currentUserID : "" // Set the current user's ID or empty if not typing
+            "typing": isTyping ? currentUserID : ""
         ], merge: true)
     }
 
@@ -148,38 +181,33 @@ struct ChatView: View {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         let chatID = generateChatID(user1: uid, user2: chatPartner.id)
 
-        Firestore.firestore().collection("chats").document(chatID).addSnapshotListener { snapshot, error in
-            if let error = error {
-                print("🔥 Error fetching typing status: \(error.localizedDescription)")
-                return
-            }
+        typingListener = Firestore.firestore().collection("chats").document(chatID)
+            .addSnapshotListener { snapshot, error in
+                guard let data = snapshot?.data(),
+                      let typingUserID = data["typing"] as? String else { return }
 
-            if let data = snapshot?.data(), let typingUserID = data["typing"] as? String {
-                if typingUserID == chatPartner.id {
-                    withAnimation {
-                        isTyping = true
+                let partnerIsTyping = typingUserID == chatPartner.id
+                withAnimation {
+                    isPartnerTyping = partnerIsTyping
+                    if partnerIsTyping {
                         startTypingAnimation()
-                    }
-                } else {
-                    withAnimation {
-                        isTyping = false
-                        typingText = "" // Reset typing text
+                    } else {
+                        typingText = ""
                     }
                 }
             }
-        }
     }
 
     private func startTypingAnimation() {
         let typingMessages = ["", ".", "..", "..."]
         var counter = 0
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { timer in
-            if isTyping {
+            if isPartnerTyping {
                 typingText = typingMessages[counter % 4]
                 counter += 1
             } else {
                 timer.invalidate()
-                typingText = "" // Reset when stopped typing
+                typingText = ""
             }
         }
     }
@@ -213,12 +241,18 @@ struct ChatView: View {
         let text = newMessage
         newMessage = ""
 
+        // Cancel the debounce — sending the message clears the typing state
+        typingDebounceTask?.cancel()
+        if currentlyReportedTyping {
+            currentlyReportedTyping = false
+            writeTypingStatus(isTyping: false)
+        }
+
         let messageData: [String: Any] = [
             "senderID": currentUserID,
             "receiverID": chatPartner.id,
             "text": text,
             "timestamp": Timestamp(),
-            // Sender has already "read" their own message
             "readBy": [currentUserID]
         ]
 
@@ -226,11 +260,8 @@ struct ChatView: View {
             .document(chatID)
             .collection("messages")
             .addDocument(data: messageData)
-
-        updateTypingStatus(isTyping: false)
     }
 
-    // Mark the latest incoming message as read when this view is visible
     private func markLatestMessageRead() {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
         let chatID = generateChatID(user1: currentUserID, user2: chatPartner.id)
