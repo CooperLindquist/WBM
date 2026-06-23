@@ -105,7 +105,8 @@ struct SwipeAlgorithm {
     }
 
     /// How complete the profile is → 0–10
-    private static func completenessScore(_ user: User) -> Double {
+    /// (internal, not private — reused by AutoSpotlight for candidate qualification)
+    static func completenessScore(_ user: User) -> Double {
         var points: Double = 0
         if let bio = user.bio, !bio.isEmpty         { points += 2 }
         if user.imageURLs.count >= 3                { points += 3 }

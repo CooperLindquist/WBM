@@ -31,6 +31,14 @@
 		1ECA732F2FE5D684007D2294 /* UserCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA732E2FE5D684007D2294 /* UserCardView.swift */; };
 		1ECA73312FE5DB18007D2294 /* ProfileFeedCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA73302FE5DB18007D2294 /* ProfileFeedCardView.swift */; };
 		1ECA73332FE5DB3A007D2294 /* ProfileFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA73322FE5DB3A007D2294 /* ProfileFeedView.swift */; };
+		1ECA73352FE63914007D2294 /* ProfilePreviewTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA73342FE63914007D2294 /* ProfilePreviewTile.swift */; };
+		1ECA73372FE6391C007D2294 /* ProfileFeedDetailCover.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA73362FE6391C007D2294 /* ProfileFeedDetailCover.swift */; };
+		1ECA73392FE63CC9007D2294 /* WrittenReviewsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA73382FE63CC9007D2294 /* WrittenReviewsSheet.swift */; };
+		1ECA733B2FE63D0C007D2294 /* Review.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA733A2FE63D0C007D2294 /* Review.swift */; };
+		1ECA733D2FE76E93007D2294 /* PhotoUploadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA733C2FE76E93007D2294 /* PhotoUploadManager.swift */; };
+		1ECA733F2FE76EA8007D2294 /* PhotoGridEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA733E2FE76EA8007D2294 /* PhotoGridEditor.swift */; };
+		1ECA73432FE77CF3007D2294 /* AutoSpotlight.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA73422FE77CF3007D2294 /* AutoSpotlight.swift */; };
+		1ECA73472FE9FA56007D2294 /* MatchProfileCover.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA73462FE9FA56007D2294 /* MatchProfileCover.swift */; };
 		1ECDA42F2F686C5C00804FAD /* WBMStoreKit.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 1ECDA42E2F686C5C00804FAD /* WBMStoreKit.storekit */; };
 		1ECDA4312F68713E00804FAD /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECDA4302F68713E00804FAD /* StoreManager.swift */; };
 		DB12D4412D2E071900A4DA2B /* Utlities.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB12D4402D2E071900A4DA2B /* Utlities.swift */; };
@@ -84,6 +92,14 @@
 		1ECA732E2FE5D684007D2294 /* UserCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserCardView.swift; sourceTree = "<group>"; };
 		1ECA73302FE5DB18007D2294 /* ProfileFeedCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileFeedCardView.swift; sourceTree = "<group>"; };
 		1ECA73322FE5DB3A007D2294 /* ProfileFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileFeedView.swift; sourceTree = "<group>"; };
+		1ECA73342FE63914007D2294 /* ProfilePreviewTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilePreviewTile.swift; sourceTree = "<group>"; };
+		1ECA73362FE6391C007D2294 /* ProfileFeedDetailCover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileFeedDetailCover.swift; sourceTree = "<group>"; };
+		1ECA73382FE63CC9007D2294 /* WrittenReviewsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WrittenReviewsSheet.swift; sourceTree = "<group>"; };
+		1ECA733A2FE63D0C007D2294 /* Review.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Review.swift; sourceTree = "<group>"; };
+		1ECA733C2FE76E93007D2294 /* PhotoUploadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoUploadManager.swift; sourceTree = "<group>"; };
+		1ECA733E2FE76EA8007D2294 /* PhotoGridEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoGridEditor.swift; sourceTree = "<group>"; };
+		1ECA73422FE77CF3007D2294 /* AutoSpotlight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoSpotlight.swift; sourceTree = "<group>"; };
+		1ECA73462FE9FA56007D2294 /* MatchProfileCover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchProfileCover.swift; sourceTree = "<group>"; };
 		1ECDA42E2F686C5C00804FAD /* WBMStoreKit.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = WBMStoreKit.storekit; sourceTree = "<group>"; };
 		1ECDA4302F68713E00804FAD /* StoreManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreManager.swift; sourceTree = "<group>"; };
 		DB12D4402D2E071900A4DA2B /* Utlities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utlities.swift; sourceTree = "<group>"; };
@@ -165,15 +181,23 @@
 				1ECDA4302F68713E00804FAD /* StoreManager.swift */,
 				DB12D4402D2E071900A4DA2B /* Utlities.swift */,
 				DB1F77A42D3C8DAD00DD6378 /* LocationManager.swift */,
+				1ECA73342FE63914007D2294 /* ProfilePreviewTile.swift */,
+				1ECA733A2FE63D0C007D2294 /* Review.swift */,
 				1ECA730C2FDB6740007D2294 /* BlackJackView.swift */,
 				1ECA732E2FE5D684007D2294 /* UserCardView.swift */,
+				1ECA73462FE9FA56007D2294 /* MatchProfileCover.swift */,
 				1ECA730D2FDB6740007D2294 /* ChatView.swift */,
+				1ECA733E2FE76EA8007D2294 /* PhotoGridEditor.swift */,
+				1ECA73362FE6391C007D2294 /* ProfileFeedDetailCover.swift */,
+				1ECA73382FE63CC9007D2294 /* WrittenReviewsSheet.swift */,
 				1ECA732A2FDDCC69007D2294 /* Filters.swift */,
 				1ECA730E2FDB6740007D2294 /* DiamondStoreView.swift */,
 				1ECA730F2FDB6740007D2294 /* EditProfileView.swift */,
 				1ECA73102FDB6740007D2294 /* HomePageView.swift */,
+				1ECA73422FE77CF3007D2294 /* AutoSpotlight.swift */,
 				1ECA73112FDB6740007D2294 /* ImageCropperView.swift */,
 				1ECA73122FDB6740007D2294 /* LikesView.swift */,
+				1ECA733C2FE76E93007D2294 /* PhotoUploadManager.swift */,
 				1ECA73302FE5DB18007D2294 /* ProfileFeedCardView.swift */,
 				1ECA73322FE5DB3A007D2294 /* ProfileFeedView.swift */,
 				1ECA73132FDB6740007D2294 /* LoadingView.swift */,
@@ -303,6 +327,8 @@
 				DB5554D42EF3A11000ABAB24 /* SwipeableUserCard.swift in Sources */,
 				1ECA731B2FDB6740007D2294 /* Start.swift in Sources */,
 				1ECA731C2FDB6740007D2294 /* ImageCropperView.swift in Sources */,
+				1ECA73372FE6391C007D2294 /* ProfileFeedDetailCover.swift in Sources */,
+				1ECA733B2FE63D0C007D2294 /* Review.swift in Sources */,
 				1ECA731D2FDB6740007D2294 /* MessagesView.swift in Sources */,
 				1ECA731E2FDB6740007D2294 /* EditProfileView.swift in Sources */,
 				1ECA731F2FDB6740007D2294 /* StarsView.swift in Sources */,
@@ -310,9 +336,14 @@
 				1ECA73202FDB6740007D2294 /* OnboardingView.swift in Sources */,
 				1ECA73212FDB6740007D2294 /* ChatView.swift in Sources */,
 				1ECA73222FDB6740007D2294 /* PremiumPromptView.swift in Sources */,
+				1ECA73392FE63CC9007D2294 /* WrittenReviewsSheet.swift in Sources */,
+				1ECA73432FE77CF3007D2294 /* AutoSpotlight.swift in Sources */,
+				1ECA733F2FE76EA8007D2294 /* PhotoGridEditor.swift in Sources */,
 				1ECA73232FDB6740007D2294 /* SpotlightView.swift in Sources */,
 				1ECA732B2FDDCC69007D2294 /* Filters.swift in Sources */,
+				1ECA73352FE63914007D2294 /* ProfilePreviewTile.swift in Sources */,
 				1ECA73242FDB6740007D2294 /* HomePageView.swift in Sources */,
+				1ECA733D2FE76E93007D2294 /* PhotoUploadManager.swift in Sources */,
 				1ECA73252FDB6740007D2294 /* ProfileView.swift in Sources */,
 				1ECA73262FDB6740007D2294 /* LoadingView.swift in Sources */,
 				1ECA73272FDB6740007D2294 /* DiamondStoreView.swift in Sources */,
@@ -322,6 +353,7 @@
 				1ECA73312FE5DB18007D2294 /* ProfileFeedCardView.swift in Sources */,
 				DB82876E2D28711100A3795D /* LanguageList.swift in Sources */,
 				DB12D4412D2E071900A4DA2B /* Utlities.swift in Sources */,
+				1ECA73472FE9FA56007D2294 /* MatchProfileCover.swift in Sources */,
 				DB1F77A52D3C8DAD00DD6378 /* LocationManager.swift in Sources */,
 				DB5554D82EF3A15500ABAB24 /* FullscreenPhotoViewer.swift in Sources */,
 				1ECA72CE2FDA50DB007D2294 /* NotificationManager.swift in Sources */,

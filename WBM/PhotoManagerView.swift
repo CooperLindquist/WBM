@@ -1,155 +1,79 @@
+//
+//  PhotoManagerView.swift
+//  WBM
+//
+//  Opened from ProfileView when the user taps their profile photo.
+//  Rebuilt to match the app's visual language (gradient background,
+//  frosted glass cards) instead of a plain native List, and now shares
+//  the same upload/crop/reorder engine as EditProfileView and
+//  OnboardingView via PhotoUploadManager + PhotoGridEditor.
+//
+
 import SwiftUI
-import Firebase
 import FirebaseAuth
-import PhotosUI
-import SDWebImageSwiftUI
-import Cloudinary
 
 struct PhotoManagerView: View {
-
     @Environment(\.dismiss) private var dismiss
     @Binding var photoURLs: [String]
 
+    @StateObject private var photoManager = PhotoUploadManager()
     @State private var showingImageViewer = false
     @State private var selectedIndex = 0
-    @State private var photoItems: [PhotosPickerItem] = []
+
+    private let maxPhotos = 6
 
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(photoURLs.indices, id: \.self) { index in
-                    HStack(spacing: 15) {
+            ZStack {
+                LinearGradient(
+                    gradient: Gradient(colors: [Color.pink.opacity(0.5), Color.blue.opacity(0.7)]),
+                    startPoint: .top, endPoint: .bottom
+                )
+                .ignoresSafeArea()
 
-                        // Photo thumbnail
-                        WebImage(url: URL(string: photoURLs[index]))
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 80, height: 120)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .onTapGesture {
-                                selectedIndex = index
-                                showingImageViewer = true
-                            }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Your Photos")
+                            .font(.title2.bold())
+                            .foregroundColor(.white)
+                            .padding(.horizontal)
+                            .padding(.top, 8)
 
-                        Text("Drag to reorder")
-                            .foregroundColor(.gray)
-
-                        Spacer()
-
-                        // Delete button
-                        Button(role: .destructive) {
-                            deletePhoto(at: index)
-                        } label: {
-                            Image(systemName: "trash")
-                        }
+                        PhotoGridEditor(manager: photoManager, maxPhotos: maxPhotos)
+                            .padding(.horizontal)
                     }
+                    .padding(.bottom, 30)
                 }
-                .onMove(perform: move)
             }
-            .navigationTitle("Your Photos")
+            .navigationTitle("Manage Photos")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-
-                // Done
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {
-                        saveOrder()
                         dismiss()
                     }
-                }
-
-                // Add photo
-                ToolbarItem(placement: .topBarTrailing) {
-                    PhotosPicker(
-                        selection: $photoItems,
-                        maxSelectionCount: 6 - photoURLs.count,
-                        matching: .images
-                    ) {
-                        Image(systemName: "plus")
-                    }
-                }
-
-                // Edit reorder
-                ToolbarItem(placement: .bottomBar) {
-                    EditButton()
+                    .foregroundColor(.white)
+                    .fontWeight(.semibold)
                 }
             }
         }
-        .onChange(of: photoItems) { _, newItems in
-            uploadNewPhotos(from: newItems)
+        .onAppear {
+            // Only load once — avoids duplicating entries if this view
+            // re-renders while already populated.
+            if photoManager.photos.isEmpty {
+                photoManager.loadExisting(urls: photoURLs)
+            }
+        }
+        .onChange(of: photoManager.photos) { _, newPhotos in
+            // Keep the parent's binding (used elsewhere in ProfileView) in sync
+            // with whatever order/contents the grid currently has.
+            photoURLs = newPhotos.compactMap { $0.remoteURL }
         }
         .fullScreenCover(isPresented: $showingImageViewer) {
             FullscreenPhotoViewer(
                 photoURLs: photoURLs,
                 selectedIndex: selectedIndex
             )
-        }
-    }
-
-    // MARK: - Reorder
-    private func move(from source: IndexSet, to destination: Int) {
-        photoURLs.move(fromOffsets: source, toOffset: destination)
-    }
-
-    // MARK: - Delete
-    private func deletePhoto(at index: Int) {
-        let removedURL = photoURLs.remove(at: index)
-        removeFromFirestore(url: removedURL)
-    }
-
-    private func removeFromFirestore(url: String) {
-        guard let uid = Auth.auth().currentUser?.uid else { return }
-        Firestore.firestore()
-            .collection("users")
-            .document(uid)
-            .updateData([
-                "profileImageURLs": FieldValue.arrayRemove([url])
-            ])
-    }
-
-    // MARK: - Save Order
-    private func saveOrder() {
-        guard let uid = Auth.auth().currentUser?.uid else { return }
-        Firestore.firestore()
-            .collection("users")
-            .document(uid)
-            .updateData([
-                "profileImageURLs": photoURLs
-            ])
-    }
-
-    // MARK: - Upload New Photos
-    private func uploadNewPhotos(from items: [PhotosPickerItem]) {
-        for item in items {
-            item.loadTransferable(type: Data.self) { result in
-                DispatchQueue.main.async {
-                    if case .success(let data?) = result,
-                       let image = UIImage(data: data),
-                       let jpeg = image.jpegData(compressionQuality: 0.8) {
-
-                        uploadToCloudinary(data: jpeg)
-                    }
-                }
-            }
-        }
-        photoItems = []
-    }
-
-    private func uploadToCloudinary(data: Data) {
-        let cloudinary = CLDCloudinary(configuration:
-            CLDConfiguration(cloudName: "dfxodj9gk", apiKey: "998259646284382")
-        )
-
-        cloudinary.createUploader().upload(
-            data: data,
-            uploadPreset: "profile pics"
-        ) { result, _ in
-            DispatchQueue.main.async {
-                if let url = result?.secureUrl {
-                    photoURLs.append(url)
-                    saveOrder()
-                }
-            }
         }
     }
 }

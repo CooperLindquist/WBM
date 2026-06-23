@@ -1,6 +1,7 @@
 import SwiftUI
 import Firebase
 import FirebaseAuth
+import SDWebImageSwiftUI
 
 struct ChatView: View {
     let chatPartner: User
@@ -8,6 +9,7 @@ struct ChatView: View {
     @State private var newMessage: String = ""
     @State private var listener: ListenerRegistration? = nil
     @State private var showingRateUserView = false
+    @State private var showingProfile = false
     @State private var isTyping: Bool = false
     @State private var typingText: String = ""
 
@@ -95,7 +97,28 @@ struct ChatView: View {
                 }
             }
         }
-        .navigationTitle(chatPartner.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Button(action: { showingProfile = true }) {
+                    HStack(spacing: 8) {
+                        WebImage(url: URL(string: chatPartner.imageURLs.first ?? ""))
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 32, height: 32)
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(Color.white.opacity(0.4), lineWidth: 1))
+
+                        Text(chatPartner.name)
+                            .font(.headline)
+                            .foregroundColor(.white)
+                    }
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showingProfile) {
+            MatchProfileCover(user: chatPartner, onClose: { showingProfile = false })
+        }
         .onAppear {
             fetchMessages()
             markLatestMessageRead()

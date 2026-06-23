@@ -118,6 +118,8 @@ struct HomePageView: View {
 
         currentIndex = 0
         users.removeAll()
+        lastFetchedDocument = nil
+        reachedEndOfUsers = false
 
         // Delete every doc in the swipedUsers subcollection (skips)
         userRef.collection("swipedUsers").getDocuments { snapshot, error in
@@ -185,54 +187,132 @@ struct HomePageView: View {
     }
 
     // MARK: - Paginated + Scored Fetch
-    // Fetches up to `pageSize` users at a time. Called again automatically
-    // when the stack drops to `refetchThreshold` cards.
+    // Fetches users in pages and keeps paging forward until enough of them
+    // pass the active filters, instead of stopping after one fixed-size page.
+    // (Filtering happens client-side after fetch, so a narrow filter — e.g.
+    // weight 150-160 — could otherwise come back nearly empty even when
+    // plenty of matches exist later in the collection.)
 
     private let pageSize = 20
     private let refetchThreshold = 5
+    private let minDesiredMatches = 10   // keep paging until we have at least this many
+    private let maxPagesPerFetch = 5     // safety cap so a near-impossible filter can't loop forever
+
+    @State private var lastFetchedDocument: DocumentSnapshot? = nil
+    @State private var reachedEndOfUsers = false
 
     private func fetchUsers() {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
+        isLoading = true
 
-        // Fetch active spotlights first so we can boost them in scoring
         fetchSpotlightedIDs { spotlightedIDs in
-            var query: Query = Firestore.firestore()
-                .collection("users")
-                .limit(to: self.pageSize)
+            self.fetchUsersPage(
+                currentUserID: currentUserID,
+                spotlightedIDs: spotlightedIDs,
+                accumulated: [],
+                pagesFetched: 0
+            )
+        }
+    }
 
-            Firestore.firestore().collection("users")
-                .limit(to: self.pageSize)
-                .getDocuments { snapshot, error in
-                    if let error = error {
-                        print("Error fetching users: \(error.localizedDescription)")
-                        self.isLoading = false
-                        return
-                    }
+    /// Fetches one page starting after `lastFetchedDocument`, filters it,
+    /// and recurses for another page if we still don't have enough matches.
+    private func fetchUsersPage(
+        currentUserID: String,
+        spotlightedIDs: Set<String>,
+        accumulated: [User],
+        pagesFetched: Int
+    ) {
+        var query: Query = Firestore.firestore()
+            .collection("users")
+            .order(by: FieldPath.documentID())
+            .limit(to: pageSize)
 
-                    let currentLocation = self.locationManager.userLocation
+        if let cursor = lastFetchedDocument {
+            query = query.start(afterDocument: cursor)
+        }
 
-                    let fetched: [User] = snapshot?.documents.compactMap { doc in
-                        guard doc.documentID != currentUserID else { return nil }
-                        guard !self.excludedUsers.contains(doc.documentID) else { return nil }
-                        guard let user = User(id: doc.documentID, data: doc.data()) else { return nil }
+        query.getDocuments { snapshot, error in
+            if let error = error {
+                print("Error fetching users: \(error.localizedDescription)")
+                self.finishFetch(with: accumulated, spotlightedIDs: spotlightedIDs)
+                return
+            }
 
-                        // Apply filters (distance, weight, height, etc.)
-                        guard self.filters.matches(user: user, currentLocation: currentLocation) else { return nil }
+            guard let documents = snapshot?.documents, !documents.isEmpty else {
+                // No more documents left in the collection at all.
+                self.reachedEndOfUsers = true
+                self.finishFetch(with: accumulated, spotlightedIDs: spotlightedIDs)
+                return
+            }
 
-                        return user
-                    } ?? []
+            self.lastFetchedDocument = documents.last
+            let currentLocation = self.locationManager.userLocation
 
-                    // Score and rank the candidates
-                    let ranked = SwipeAlgorithm.rank(fetched, spotlightedIDs: spotlightedIDs)
+            let filtered: [User] = documents.compactMap { doc in
+                guard doc.documentID != currentUserID else { return nil }
+                guard !self.excludedUsers.contains(doc.documentID) else { return nil }
+                guard let user = User(id: doc.documentID, data: doc.data()) else { return nil }
+                guard self.filters.matches(user: user, currentLocation: currentLocation) else { return nil }
+                return user
+            }
 
-                    DispatchQueue.main.async {
-                        // Avoid duplicates if called while cards are still in stack
-                        let existingIDs = Set(self.users.map { $0.id })
-                        let newUsers = ranked.filter { !existingIDs.contains($0.id) }
-                        self.users.append(contentsOf: newUsers)
-                        self.isLoading = false
-                    }
-                }
+            let combined = accumulated + filtered
+            let nextPageCount = pagesFetched + 1
+
+            // Keep paging if we don't have enough matches yet, haven't hit the
+            // safety cap, and there's reason to believe more documents exist
+            // (a full page came back, so the collection likely continues).
+            let shouldKeepPaging = combined.count < self.minDesiredMatches
+                && nextPageCount < self.maxPagesPerFetch
+                && documents.count == self.pageSize
+
+            if shouldKeepPaging {
+                self.fetchUsersPage(
+                    currentUserID: currentUserID,
+                    spotlightedIDs: spotlightedIDs,
+                    accumulated: combined,
+                    pagesFetched: nextPageCount
+                )
+            } else {
+                self.finishFetch(with: combined, spotlightedIDs: spotlightedIDs)
+            }
+        }
+    }
+
+    private func finishFetch(with matches: [User], spotlightedIDs: Set<String>) {
+        let ranked = SwipeAlgorithm.rank(matches, spotlightedIDs: spotlightedIDs)
+
+        DispatchQueue.main.async {
+            let existingIDs = Set(self.users.map { $0.id })
+            let newUsers = ranked.filter { !existingIDs.contains($0.id) }
+            self.users.append(contentsOf: newUsers)
+            self.isLoading = false
+        }
+
+        // Track visibility — used by automatic Spotlight to find people who
+        // aren't getting shown much. Fire-and-forget; not critical if it
+        // occasionally fails, so no error handling needed here.
+        recordFeedAppearances(for: ranked)
+    }
+
+    private func recordFeedAppearances(for shownUsers: [User]) {
+        guard !shownUsers.isEmpty else { return }
+        let db = Firestore.firestore()
+        let batch = db.batch()
+
+        for user in shownUsers {
+            let ref = db.collection("users").document(user.id)
+            batch.updateData([
+                "feedAppearanceCount": FieldValue.increment(Int64(1)),
+                "lastShownInFeedAt": Timestamp(date: Date())
+            ], forDocument: ref)
+        }
+
+        batch.commit { error in
+            if let error = error {
+                print("Error recording feed appearances: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -254,6 +334,15 @@ struct HomePageView: View {
     
     private func applyFilters() {
         filters.saveFilters()
+
+        // New filter criteria means the old cursor position and any already-
+        // loaded (under the previous filter) cards are no longer valid —
+        // start fresh from the beginning of the collection.
+        lastFetchedDocument = nil
+        reachedEndOfUsers = false
+        users.removeAll()
+        currentIndex = 0
+
         fetchUsers()
         showFilterSheet = false  // Close the filter sheet
     }
@@ -273,7 +362,7 @@ struct HomePageView: View {
 
     /// Silently fetch more people when the feed is running low
     private func refetchIfNeeded() {
-        guard users.count <= refetchThreshold, !isLoading else { return }
+        guard users.count <= refetchThreshold, !isLoading, !reachedEndOfUsers else { return }
         fetchUsers()
     }
 

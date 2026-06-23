@@ -81,28 +81,76 @@ func addToSpotlight(userID: String, additionalDuration: TimeInterval = 18000, co
 }
 
 
-// Function to check if a user is currently spotlighted
+// Companion to fetchSpotlightedUsers — returns a [userID: source] lookup so
+// the UI can distinguish manually-activated Spotlight from automatic boosts.
+// Kept separate from fetchSpotlightedUsers (rather than changing its return
+// type) since other call sites only need the ID list.
+func fetchSpotlightSources(completion: @escaping ([String: String]) -> Void) {
+    let spotlightRef = Firestore.firestore().collection("Spotlight")
+    let now = Date()
+
+    spotlightRef
+        .whereField("expiresAt", isGreaterThan: Timestamp(date: now))
+        .getDocuments { snapshot, error in
+            guard error == nil, let documents = snapshot?.documents else {
+                completion([:])
+                return
+            }
+
+            var sources: [String: String] = [:]
+            for doc in documents {
+                sources[doc.documentID] = doc.data()["source"] as? String ?? "manual"
+            }
+            completion(sources)
+        }
+}
+
+// Function to check if a user is currently spotlighted.
+// Queries Firestore for only non-expired documents (instead of fetching
+// the whole collection and discarding most of it client-side), and
+// opportunistically deletes any expired documents it happens to see
+// along the way — since there's no scheduled Cloud Function doing this
+// server-side, this keeps the Spotlight collection from growing forever
+// as a side effect of normal usage (anyone opening Spotlight helps clean up).
 func fetchSpotlightedUsers(completion: @escaping ([String]) -> Void) {
     let spotlightRef = Firestore.firestore().collection("Spotlight")
+    let now = Date()
 
-    spotlightRef.getDocuments { snapshot, error in
-        if let error = error {
-            print("Error fetching spotlighted users: \(error.localizedDescription)")
-            completion([])
-            return
+    // Active spotlights — filtered server-side, not fetched-then-discarded.
+    spotlightRef
+        .whereField("expiresAt", isGreaterThan: Timestamp(date: now))
+        .getDocuments { snapshot, error in
+            if let error = error {
+                print("Error fetching spotlighted users: \(error.localizedDescription)")
+                completion([])
+                return
+            }
+
+            let activeUserIDs = snapshot?.documents.map { $0.documentID } ?? []
+            completion(activeUserIDs)
         }
 
-        let activeUsers = snapshot?.documents.compactMap { doc -> String? in
-            guard let expiresAt = (doc["expiresAt"] as? Timestamp)?.dateValue() else { return nil }
-            return expiresAt > Date() ? doc.documentID : nil
-        } ?? []
+    // Opportunistic cleanup — deletes a batch of expired docs in the background.
+    // Capped at 100 per call so a single screen-open can't trigger a huge write burst.
+    spotlightRef
+        .whereField("expiresAt", isLessThanOrEqualTo: Timestamp(date: now))
+        .limit(to: 100)
+        .getDocuments { snapshot, error in
+            guard let documents = snapshot?.documents, !documents.isEmpty, error == nil else { return }
 
-        completion(activeUsers)
-    }
+            let batch = Firestore.firestore().batch()
+            documents.forEach { batch.deleteDocument($0.reference) }
+            batch.commit { error in
+                if let error = error {
+                    print("Error cleaning up expired spotlight docs: \(error.localizedDescription)")
+                }
+            }
+        }
 }
 
 // SpotlightView UI
 struct SpotlightView: View {
+    @StateObject private var locationManager = LocationManager()
     @State private var spotlightedUsers: [User] = []
     @State private var isLoading = true
     @State private var spotlightsRemaining: Int = 0
@@ -110,7 +158,8 @@ struct SpotlightView: View {
     @State private var ownSpotlightExpiresAt: Date?
     @State private var timeRemainingText: String = ""
     @State private var countdownTimer: Timer?
-    @State private var showFullDetail = false
+    @State private var filters: Filters = Filters.loadFilters()
+    @State private var spotlightSources: [String: String] = [:]
 
     var body: some View {
         ZStack {
@@ -171,20 +220,18 @@ struct SpotlightView: View {
                         .foregroundColor(.white)
                 } else {
                     ScrollView {
-                        VStack(spacing: 20) {
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
                             ForEach(spotlightedUsers, id: \.id) { user in
-                                SpotlightCardView(user: user)
-                                    .onTapGesture {
-                                        selectedUser = user
-                                    }
-                                    .frame(width: 350)
-                                    .padding()
-                                    .background(Color.white)
-                                    .cornerRadius(20)
-                                    .shadow(radius: 5)
+                                Button(action: { selectedUser = user }) {
+                                    ProfilePreviewTile(
+                                        user: user,
+                                        badge: spotlightSources[user.id] == "auto" ? "✨ Rising" : "⭐ Spotlight"
+                                    )
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
-                        .padding(.top, 20)
+                        .padding()
                     }
                 }
             }
@@ -192,65 +239,13 @@ struct SpotlightView: View {
         .onAppear(perform: loadSpotlightedUsersAndCount)
         .onDisappear { countdownTimer?.invalidate() }
         .fullScreenCover(item: $selectedUser) { user in
-            VStack {
-                HStack {
-                    Button(action: { selectedUser = nil; showFullDetail = false }) {
-                        Image(systemName: "chevron.backward")
-                            .font(.title2)
-                            .padding()
-                            .background(Circle().fill(Color.white.opacity(0.8)))
-                    }
-                    Spacer()
-                }
-                .padding(.horizontal)
-                .padding(.top, 10)
-
-                Spacer()
-
-                UserCardView(user: user, onInfoTapped: { showFullDetail = true })
-                    .frame(width: 350, height: 500)
-                    .cornerRadius(20)
-                    .shadow(radius: 10)
-                    .padding(.top, 30)
-                    .sheet(isPresented: $showFullDetail) {
-                        UserProfileDetailSheet(
-                            user: user,
-                            onDismiss: { showFullDetail = false }
-                        )
-                    }
-
-                Spacer()
-                
-                // 🆕 Skip & Like Buttons
-                HStack {
-                    Button(action: { skipUser(user: user) }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .resizable()
-                            .frame(width: 60, height: 60)
-                            .foregroundColor(.red)
-                    }
-                    .padding(.horizontal, 40)
-
-                    Button(action: { approveUser(user: user) }) {
-                        Image(systemName: "heart.circle.fill")
-                            .resizable()
-                            .frame(width: 60, height: 60)
-                            .foregroundColor(.green)
-                    }
-                    .padding(.horizontal, 40)
-                }
-                .padding(.bottom, 30)
-            }
-            .background(
-                LinearGradient(
-                    gradient: Gradient(colors: [Color.purple.opacity(0.5), Color.orange.opacity(0.5)]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+            ProfileFeedDetailCover(
+                user: user,
+                onClose: { selectedUser = nil },
+                onSkip: { skipUser(user: $0); selectedUser = nil },
+                onApprove: { approveUser(user: $0); selectedUser = nil }
             )
         }
-
     }
 
     private func useSpotlight() {
@@ -279,6 +274,15 @@ struct SpotlightView: View {
     private func loadSpotlightedUsersAndCount() {
         isLoading = true
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
+
+        // Fire-and-forget: tops up automatic Spotlight slots if any are
+        // available. Runs in the background; doesn't block this load, and
+        // any newly-boosted users will appear next time this view refreshes
+        // (e.g. after using a manual Spotlight, or next time the tab opens).
+        AutoSpotlight.topUpIfNeeded(excludingUserID: currentUserID)
+        fetchSpotlightSources { sources in
+            DispatchQueue.main.async { self.spotlightSources = sources }
+        }
 
         let currentUserRef = Firestore.firestore().collection("users").document(currentUserID)
 
@@ -322,9 +326,17 @@ struct SpotlightView: View {
                             return
                         }
 
-                        spotlightedUsers = snapshot?.documents.compactMap { doc -> User? in
+                        let currentLocation = self.locationManager.userLocation
+                        let candidates = snapshot?.documents.compactMap { doc -> User? in
                             return User(id: doc.documentID, data: doc.data())
                         } ?? []
+
+                        // Apply the same distance filter used on the home feed —
+                        // a spotlighted user outside your distance range still
+                        // shouldn't show up here.
+                        spotlightedUsers = candidates.filter { user in
+                            self.filters.matches(user: user, currentLocation: currentLocation)
+                        }
 
                         isLoading = false
                     }
@@ -388,6 +400,9 @@ struct SpotlightView: View {
         selectedUser = nil
     }
 
+    // Data model used across the whole app: a user's `likes` array holds the
+    // IDs of people who liked THEM (not people they liked). So when I (currentUserID)
+    // like `user`, the write goes onto `user`'s document, not mine.
     private func approveUser(user: User) {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
 
@@ -406,12 +421,12 @@ struct SpotlightView: View {
                 return nil
             }
 
-            let currentUserLikes = currentUserDoc.data()?["likes"] as? [String] ?? []
-            let likedUserLikes = likedUserDoc.data()?["likes"] as? [String] ?? []
+            // Fix: check whether `user` already liked ME — that lives in MY likes array.
+            let myLikesReceived = currentUserDoc.data()?["likes"] as? [String] ?? []
             var currentUserMatches = currentUserDoc.data()?["matches"] as? [String] ?? []
             var likedUserMatches = likedUserDoc.data()?["matches"] as? [String] ?? []
 
-            let isMutualLike = currentUserLikes.contains(user.id)
+            let isMutualLike = myLikesReceived.contains(user.id)
 
             if isMutualLike {
                 if !currentUserMatches.contains(user.id) {
@@ -421,12 +436,15 @@ struct SpotlightView: View {
                     likedUserMatches.append(currentUserID)
                 }
 
+                // Fix: remove user.id from MY likes (they liked me, now matched),
+                // and remove currentUserID from THEIR likes (I liked them, now matched).
                 transaction.updateData(["matches": currentUserMatches, "likes": FieldValue.arrayRemove([user.id])], forDocument: currentUserRef)
                 transaction.updateData(["matches": likedUserMatches, "likes": FieldValue.arrayRemove([currentUserID])], forDocument: likedUserRef)
 
                 print("✅ Match created between \(currentUserID) and \(user.id)!")
             } else {
-                transaction.updateData(["likes": FieldValue.arrayUnion([user.id])], forDocument: currentUserRef)
+                // Fix: my like goes onto THEIR document, not mine.
+                transaction.updateData(["likes": FieldValue.arrayUnion([currentUserID])], forDocument: likedUserRef)
                 print("👍 Liked \(user.id), waiting for them to like back.")
             }
 
@@ -437,35 +455,6 @@ struct SpotlightView: View {
             } else {
                 spotlightedUsers.removeAll { $0.id == user.id }
                 selectedUser = nil
-            }
-        }
-    }
-}
-
-
-
-
-// SpotlightCardView
-struct SpotlightCardView: View {
-    let user: User
-
-    var body: some View {
-        VStack(spacing: 20) {
-            WebImage(url: URL(string: user.imageURLs.first ?? ""))
-                .resizable()
-                .scaledToFill()
-                .frame(width: 300, height: 300)
-                .clipShape(Circle())
-                .shadow(radius: 10)
-
-            Text(user.name)
-                .font(.title)
-                .fontWeight(.bold)
-
-            if let bio = user.bio {
-                Text(bio)
-                    .multilineTextAlignment(.center)
-                    .foregroundColor(.gray)
             }
         }
     }

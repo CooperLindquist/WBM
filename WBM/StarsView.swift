@@ -3,12 +3,8 @@ import Firebase
 import FirebaseAuth
 import SDWebImageSwiftUI
 
-struct Review: Identifiable, Hashable {
-    var id = UUID() // Unique identifier
-    var reviewerID: String
-    var reviewText: String
-    var isAnonymous: Bool
-}
+// Review struct now lives in Review.swift (shared across StarsView and
+// WrittenReviewsSheet) — removed the duplicate declaration that was here.
 
 struct StarsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -123,13 +119,7 @@ struct StarsView: View {
                     ]
 
                     let rawReviews = data["reviews"] as? [[String: Any]] ?? []
-                    reviews = rawReviews.compactMap { rawReview in
-                        guard let reviewerID = rawReview["reviewerID"] as? String,
-                              let reviewText = rawReview["review"] as? String,
-                              let isAnonymous = rawReview["isAnonymous"] as? Bool else { return nil }
-
-                        return Review(reviewerID: reviewerID, reviewText: reviewText, isAnonymous: isAnonymous)
-                    }
+                    reviews = rawReviews.compactMap { Review(data: $0) }
                 }
             }
 
@@ -151,7 +141,7 @@ struct StarsView: View {
             Firestore.firestore().collection("users").document(userID).getDocument { document, error in
                 if let document = document, document.exists {
                     let name = document.data()?["name"] as? String ?? "User"
-                    let profileImageURL = document.data()?["profileImageURLs"] as? String ?? ""
+                    let profileImageURL = (document.data()?["profileImageURLs"] as? [String])?.first ?? ""
                     fetchedDetails[userID] = (name: name, profileImageURL: profileImageURL)
                 }
                 group.leave()
@@ -199,7 +189,7 @@ struct StarsView: View {
                     .fontWeight(.bold)
                     .foregroundColor(.white)
 
-                Text(review.reviewText)
+                Text(review.text)
                     .foregroundColor(.white.opacity(0.9))
                     .fixedSize(horizontal: false, vertical: true) // Allows multi-line reviews
             }

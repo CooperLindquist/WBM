@@ -18,11 +18,29 @@ struct ProfileFeedCardView: View {
     var currentUserLocation: CLLocation? = nil
     var onApprove: () -> Void
     var onSkip: () -> Void
+    // When false, hides the Pass/Like bottom bar entirely — used for
+    // read-only contexts (e.g. viewing a match's profile from inside chat,
+    // where liking/passing no longer makes sense).
+    var showActionBar: Bool = true
 
     @State private var showOutOfDiamonds = false
+    @State private var showReviews = false
 
     var body: some View {
         ZStack {
+            // This component is reused everywhere (home feed, Likes, Spotlight,
+            // chat profile view) — some of those present it inside a
+            // fullScreenCover, which has no inherited background and defaults
+            // to plain black/white depending on color scheme. Giving it the
+            // app's own gradient here means every context that renders this
+            // view gets the correct look, with no per-screen fix needed.
+            LinearGradient(
+                gradient: Gradient(colors: [Color.pink.opacity(0.5), Color.blue.opacity(0.7)]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
             ScrollView {
                 VStack(spacing: 14) {
                     // 1. First photo + name/age overlay
@@ -84,17 +102,43 @@ struct ProfileFeedCardView: View {
                         }
                     }
 
+                    // Reviews link — always shown regardless of whether star
+                    // ratings exist yet, since a written review can exist on its own.
+                    Button(action: { showReviews = true }) {
+                        HStack {
+                            Image(systemName: "text.bubble.fill")
+                            Text("See written reviews")
+                                .fontWeight(.medium)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                        }
+                        .foregroundColor(.white)
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 16)
+                        .background(Color.white.opacity(0.15))
+                        .cornerRadius(14)
+                    }
+
                     // End-of-profile spacer so the bottom bar never clips content
-                    Color.clear.frame(height: 90)
+                    Color.clear.frame(height: showActionBar ? 90 : 24)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
             }
 
-            VStack {
-                Spacer()
-                bottomBar
+            if showActionBar {
+                VStack {
+                    Spacer()
+                    bottomBar
+                }
             }
+        }
+        .sheet(isPresented: $showReviews) {
+            WrittenReviewsSheet(
+                userID: user.id,
+                userName: user.name,
+                onDismiss: { showReviews = false }
+            )
         }
     }
 

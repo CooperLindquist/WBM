@@ -8,124 +8,59 @@ struct LikesView: View {
     @State private var likedUsers: [User] = []
     @State private var selectedUser: User? = nil
     @State private var isLoading = true
-    @State private var showFullDetail = false
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                LinearGradient(
-                    gradient: Gradient(colors: [Color.pink.opacity(0.5), Color.blue.opacity(0.7)]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+        ZStack {
+            LinearGradient(
+                gradient: Gradient(colors: [Color.pink.opacity(0.5), Color.blue.opacity(0.7)]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
 
-                if isLoading {
-                    ProgressView("Loading Likes...")
-                        .progressViewStyle(CircularProgressViewStyle())
-                } else if likedUsers.isEmpty {
-                    Text("No one has liked you yet!")
-                        .font(.headline)
+            if isLoading {
+                ProgressView("Loading Likes...")
+                    .progressViewStyle(CircularProgressViewStyle())
+            } else if likedUsers.isEmpty {
+                Text("No one has liked you yet!")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding()
+            } else {
+                VStack(alignment: .leading) {
+                    Text("Likes")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
                         .foregroundColor(.white)
-                        .padding()
-                } else {
-                    VStack {
-                        Text("Likes")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                            .padding()
-                            .offset(x: -150, y: -65)
+                        .padding(.horizontal)
+                        .padding(.top, 8)
 
-                        ScrollView {
-                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 20) {
-                                ForEach(likedUsers) { user in
-                                    Button(action: {
-                                        selectedUser = user
-                                    }) {
-                                        VStack {
-                                            WebImage(url: URL(string: user.imageURLs.first ?? ""))
-                                                .resizable()
-                                                .scaledToFill()
-                                                .frame(width: 150, height: 150)
-                                                .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                                            Text(user.name)
-                                                .font(.headline)
-                                                .foregroundColor(.white)
-                                        }
-                                        .padding()
-                                        .background(Color.white.opacity(0.2))
-                                        .cornerRadius(10)
-                                        .shadow(radius: 5)
-                                    }
+                    ScrollView {
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                            ForEach(likedUsers) { user in
+                                Button(action: { selectedUser = user }) {
+                                    ProfilePreviewTile(user: user)
                                 }
+                                .buttonStyle(.plain)
                             }
-                            .padding()
                         }
-                        .refreshable {
-                            fetchLikedUsers()
-                        }
+                        .padding()
+                    }
+                    .refreshable {
+                        fetchLikedUsers()
                     }
                 }
             }
-            .fullScreenCover(item: $selectedUser) { user in
-                VStack {
-                    HStack {
-                        Button(action: { selectedUser = nil; showFullDetail = false }) {
-                            Image(systemName: "chevron.backward")
-                                .font(.title2)
-                                .padding()
-                                .background(Circle().fill(Color.white.opacity(0.8)))
-                        }
-                        Spacer()
-                    }
-                    .padding(.horizontal)
-                    .padding(.top, 10)
-
-                    Spacer()
-
-                    UserCardView(user: user, onInfoTapped: { showFullDetail = true })
-                        .frame(width: 350, height: 500)
-                        .cornerRadius(20)
-                        .shadow(radius: 10)
-                        .padding(.top, 30)
-                        .sheet(isPresented: $showFullDetail) {
-                            UserProfileDetailSheet(
-                                user: user,
-                                onDismiss: { showFullDetail = false }
-                            )
-                        }
-
-                    Spacer()
-
-                    // Skip & Approve Buttons
-                    HStack(spacing: 30) {
-                        Button(action: { skipUser(user) }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 100))
-                                .foregroundColor(.red)
-                        }
-
-                        Button(action: { approveUser(user) }) {
-                            Image(systemName: "heart.circle.fill")
-                                .font(.system(size: 100))
-                                .foregroundColor(.green)
-                        }
-                    }
-                    .padding(.bottom, 40)
-                }
-                .background(
-                    LinearGradient(
-                        gradient: Gradient(colors: [Color.purple.opacity(0.5), Color.orange.opacity(0.5)]),
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .ignoresSafeArea()
-                )
-            }
-            .onAppear(perform: fetchLikedUsers)
         }
-        .navigationViewStyle(StackNavigationViewStyle())
+        .fullScreenCover(item: $selectedUser) { user in
+            ProfileFeedDetailCover(
+                user: user,
+                onClose: { selectedUser = nil },
+                onSkip: { skipUser($0); selectedUser = nil },
+                onApprove: { approveUser($0); selectedUser = nil }
+            )
+        }
+        .onAppear(perform: fetchLikedUsers)
     }
 
     // Fetch the users who have liked the current user
@@ -167,13 +102,14 @@ struct LikesView: View {
         }
     }
 
-    // Skip User: Removes user from "likes" and adds to "swipedUsers"
+    // Skip User: removes them from my received-likes, and records the skip
+    // in the swipedUsers subcollection (not a legacy array — see HomePageView).
     private func skipUser(_ user: User) {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
+        let myRef = Firestore.firestore().collection("users").document(currentUserID)
 
-        Firestore.firestore().collection("users").document(currentUserID).updateData([
-            "likes": FieldValue.arrayRemove([user.id]),
-            "swipedUsers": FieldValue.arrayUnion([user.id])
+        myRef.updateData([
+            "likes": FieldValue.arrayRemove([user.id])
         ]) { error in
             if let error = error {
                 print("Error updating skipped user: \(error.localizedDescription)")
@@ -181,6 +117,13 @@ struct LikesView: View {
                 likedUsers.removeAll { $0.id == user.id }
             }
         }
+
+        myRef.collection("swipedUsers").document(user.id)
+            .setData(["swipedAt": Timestamp(date: Date())]) { error in
+                if let error = error {
+                    print("Error recording swipe: \(error.localizedDescription)")
+                }
+            }
     }
 
     // Approve User: Adds user to "matches" if both have liked each other
@@ -202,16 +145,14 @@ struct LikesView: View {
                 return nil
             }
 
-            // Get current user's likes (who liked them)
-            let currentUserLikes = currentUserDoc.data()?["likes"] as? [String] ?? []
-            // Get liked user's likes (who they liked)
-            let likedUserLikes = likedUserDoc.data()?["likes"] as? [String] ?? []
+            // My own `likes` array holds the IDs of people who liked ME.
+            let myLikesReceived = currentUserDoc.data()?["likes"] as? [String] ?? []
 
             var currentUserMatches = currentUserDoc.data()?["matches"] as? [String] ?? []
             var likedUserMatches = likedUserDoc.data()?["matches"] as? [String] ?? []
 
-            // Check if mutual match: If the liked user (user.id) is in my likes list
-            let isMutualLike = currentUserLikes.contains(user.id)
+            // Mutual if `user` already appears in my own likes-received list.
+            let isMutualLike = myLikesReceived.contains(user.id)
 
             if isMutualLike {
                 // If mutual, add to matches
@@ -235,10 +176,11 @@ struct LikesView: View {
 
                 print("✅ Match created between \(currentUserID) and \(user.id)!")
             } else {
-                // If not mutual, just store the like
+                // Fix: my like goes onto THEIR document (their `likes` = who liked them),
+                // not onto my own document.
                 transaction.updateData([
-                    "likes": FieldValue.arrayUnion([user.id])
-                ], forDocument: currentUserRef)
+                    "likes": FieldValue.arrayUnion([currentUserID])
+                ], forDocument: likedUserRef)
 
                 print("👍 Liked \(user.id), waiting for them to like back.")
             }

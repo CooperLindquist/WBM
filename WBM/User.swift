@@ -28,6 +28,12 @@ struct User: Identifiable, Hashable {
     // Last time the user was active (written on app open/foreground)
     let lastActive: Date?
 
+    // Visibility tracking — used to find under-exposed users for automatic
+    // Spotlight boosts. Incremented client-side whenever this profile is
+    // included in someone's swipe feed (see SwipeAlgorithm / HomePageView).
+    let feedAppearanceCount: Int
+    let lastShownInFeedAt: Date?
+
     init?(id: String, data: [String: Any]) {
         guard let name = data["name"] as? String,
               let imageURLs = data["profileImageURLs"] as? [String], !imageURLs.isEmpty else { return nil }
@@ -52,6 +58,8 @@ struct User: Identifiable, Hashable {
         self.personalityRating   = data["personality"]    as? Double
         self.communicationRating = data["communication"]  as? Double
         self.lastActive = (data["lastActive"] as? Timestamp)?.dateValue()
+        self.feedAppearanceCount = data["feedAppearanceCount"] as? Int ?? 0
+        self.lastShownInFeedAt = (data["lastShownInFeedAt"] as? Timestamp)?.dateValue()
 
         if let locationData = data["location"] as? [String: Any],
            let lat = locationData["latitude"] as? CLLocationDegrees,

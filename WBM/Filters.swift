@@ -3,7 +3,7 @@ import CoreLocation
 import SwiftUI
 
 // Filters Struct - Updated to support UserDefaults
-struct Filters {
+struct Filters: Equatable {
     var minWeight: Double
     var maxWeight: Double
     var minHeight: Double
@@ -199,8 +199,17 @@ struct FilterSheet: View {
     @Binding var filters: Filters
     var applyFilters: () -> Void
     @State private var distance: Double = 50  // default value
-    
-    
+
+    // Snapshot taken when the sheet opens — lets us tell whether the user
+    // actually changed anything, so Apply doesn't needlessly re-shuffle
+    // the feed when nothing's different.
+    @State private var originalFilters: Filters?
+
+    private var hasChanges: Bool {
+        guard let original = originalFilters else { return false }
+        return filters != original
+    }
+
     var body: some View {
         NavigationView {
             Form {
@@ -330,7 +339,14 @@ struct FilterSheet: View {
             .navigationTitle("Filters")
             .navigationBarItems(trailing: Button("Apply") {
                 applyFilters()
-            })
+            }
+            .disabled(!hasChanges)
+            .opacity(hasChanges ? 1.0 : 0.4))
+        }
+        .onAppear {
+            if originalFilters == nil {
+                originalFilters = filters
+            }
         }
     }
 }

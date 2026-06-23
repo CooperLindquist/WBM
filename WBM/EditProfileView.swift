@@ -136,8 +136,7 @@ struct EditProfileView: View {
     @State private var smoking: String = ""
     @State private var cannabis: String = ""
     @State private var politics: String = ""
-    @State private var uploadsInProgress: Int = 0
-    @State private var isUploadingImages: Bool = false
+    @StateObject private var photoManager = PhotoUploadManager()
     @State private var profileImageURLs: [String] = []
     @State var initialProfileData: [String: Any] = [:]
     @State private var name: String = ""
@@ -147,20 +146,11 @@ struct EditProfileView: View {
     @State private var gender: String = ""
     @State private var relationshipGoal: String = ""
     @State private var selectedLanguages: [String] = []
-    @State private var photoItems: [PhotosPickerItem] = []
     @State private var isShowingLanguageList = false
     @State private var age: String = ""
-    struct ProfileImage: Identifiable {
-        let id = UUID()
-        var image: UIImage
-        var isUploading: Bool = true
-    }
 
-    @State private var selectedImages: [ProfileImage] = []
-
-    
+    private let maxPhotos = 6
     private let relationshipGoals = ["Short-term", "Long-term", "Friends", "Marriage"]
-    private let cloudinary = CLDCloudinary(configuration: CLDConfiguration(cloudName: "dfxodj9gk", apiKey: "998259646284382"))
     
     var body: some View {
         NavigationStack {
@@ -192,9 +182,6 @@ struct EditProfileView: View {
 
         }
         .onAppear(perform: loadInitialData)
-        .onChange(of: photoItems) { _, newItems in
-            loadImages(from: newItems)
-        }
         .sheet(isPresented: $isShowingLanguageList) {
             // Assuming LanguageList is defined elsewhere
             LanguageList(selectedLanguages: $selectedLanguages)
@@ -392,51 +379,7 @@ struct EditProfileView: View {
     
     private var ProfilePicturesSection: some View {
         SectionView(title: "Profile Pictures") {
-            VStack {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 15) {
-                        ForEach(selectedImages) { item in
-                            VStack {
-                                ZStack {
-                                    Image(uiImage: item.image)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 100, height: 100)
-                                        .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                                    if item.isUploading {
-                                        Color.black.opacity(0.4)
-                                        ProgressView()
-                                    }
-                                }
-
-                                Button {
-                                    removeProfilePicture(item)
-                                } label: {
-                                    Image(systemName: "trash")
-                                        .foregroundColor(.red)
-                                }
-                            }
-                        }
-
-                        
-                        PhotosPicker(
-                            selection: $photoItems,
-                            maxSelectionCount: 6 - selectedImages.count,
-                            matching: .images,
-                            label: {
-                                Image(systemName: "plus")
-                                    .resizable()
-                                    .frame(width: 50, height: 50)
-                                    .foregroundColor(.white)
-                                    .padding()
-                                    .background(Color.blue)
-                                    .clipShape(Circle())
-                            }
-                        )
-                    }
-                }
-            }
+            PhotoGridEditor(manager: photoManager, maxPhotos: maxPhotos)
         }
     }
     
@@ -448,10 +391,10 @@ struct EditProfileView: View {
                 .foregroundColor(.white)
                 .padding()
                 .frame(maxWidth: .infinity)
-                .background(isUploadingImages ? Color.gray : Color.blue)
+                .background(photoManager.isUploadingAny ? Color.gray : Color.blue)
                 .cornerRadius(10)
         }
-        .disabled(isUploadingImages)  // Disable if images are still uploading
+        .disabled(photoManager.isUploadingAny)  // Disable if images are still uploading
     }
     
     
@@ -469,180 +412,15 @@ struct EditProfileView: View {
         }
     }
     
-    private func removeProfilePicture(_ image: ProfileImage) {
-        selectedImages.removeAll { $0.id == image.id }
-    }
-
-    
-    
-    
-    private func removeImageUrlFromFirestore(imageUrl: String) {
-        guard let user = Auth.auth().currentUser else {
-            print("No authenticated user found")
-            return
-        }
-        let userDoc = Firestore.firestore().collection("users").document(user.uid)
-        
-        // Fetch the document to check if 'profileImageURLs' exists and is an array
-        userDoc.getDocument { document, error in
-            if let error = error {
-                print("❌ Error fetching document: \(error.localizedDescription)")
-                return
-            }
-            
-            guard let document = document, document.exists else {
-                print("❌ Document does not exist")
-                return
-            }
-            
-            // Confirm the profileImageURLs field exists and is an array
-            if let imageUrls = document.data()?["profileImageURLs"] as? [String] {
-                print("Existing profileImageURLs: \(imageUrls)")
-                
-                // Proceed to remove the image URL from the array
-                userDoc.updateData([
-                    "profileImageURLs": FieldValue.arrayRemove([imageUrl])
-                ]) { error in
-                    if let error = error {
-                        print("❌ Error removing image URL from Firestore: \(error.localizedDescription)")
-                    } else {
-                        print("✅ Successfully removed image URL from Firestore: \(imageUrl)")
-                    }
-                }
-            } else {
-                print("❌ profileImageURLs is not an array or doesn't exist")
-            }
-        }
-    }
-    
-    
-    
-    private func loadImages(from items: [PhotosPickerItem]) {
-        guard !items.isEmpty else { return }
-
-        isUploadingImages = true
-        uploadsInProgress = items.count
-
-        for item in items {
-            let profileImage = ProfileImage(image: UIImage(), isUploading: true)
-            selectedImages.append(profileImage)
-            let id = profileImage.id
-
-
-            item.loadTransferable(type: Data.self) { result in
-                DispatchQueue.main.async {
-                    guard let index = selectedImages.firstIndex(where: { $0.id == id }) else { return }
-
-                    switch result {
-                    case .success(let data):
-                        guard let data,
-                              let uiImage = UIImage(data: data),
-                              let cropped = cropImageToPortrait(uiImage)
-                        else {
-
-                            selectedImages.remove(at: index)
-                            return
-                        }
-
-                        selectedImages[index].image = cropped
-
-                        if let jpeg = cropped.jpegData(compressionQuality: 0.8) {
-                            uploadImageToCloudinary(imageData: jpeg, imageID: id)
-                        }
-
-                    case .failure:
-                        selectedImages.remove(at: index)
-                    }
-                }
-            }
-        }
-    }
-
-    
-    private func uploadImageToCloudinary(imageData: Data, imageID: UUID) {
-        cloudinary.createUploader().upload(
-            data: imageData,
-            uploadPreset: "profile pics"
-        ) { result, error in
-            DispatchQueue.main.async {
-                guard let index = selectedImages.firstIndex(where: { $0.id == imageID }) else { return }
-
-                uploadsInProgress -= 1
-                selectedImages[index].isUploading = false
-
-                if let url = result?.secureUrl {
-                    saveImageUrlToFirestore(url: url)
-                }
-
-                if uploadsInProgress == 0 {
-                    isUploadingImages = false
-                }
-            }
-        }
-    }
-
-    
-    
-    private func cropImageToPortrait(_ image: UIImage) -> UIImage? {
-
-        // 1️⃣ Fix orientation first
-        let fixedImage = image.fixedOrientation()
-
-        // 2️⃣ iPhone portrait ratio (3:4)
-        let targetAspect: CGFloat = 3.0 / 4.0
-
-        let width = fixedImage.size.width
-        let height = fixedImage.size.height
-        let currentAspect = width / height
-
-        var cropRect: CGRect
-
-        if currentAspect > targetAspect {
-            // Image too wide → crop sides
-            let newWidth = height * targetAspect
-            let xOffset = (width - newWidth) / 2
-            cropRect = CGRect(x: xOffset, y: 0, width: newWidth, height: height)
-        } else {
-            // Image too tall → crop top/bottom
-            let newHeight = width / targetAspect
-            let yOffset = (height - newHeight) / 2
-            cropRect = CGRect(x: 0, y: yOffset, width: width, height: newHeight)
-        }
-
-        guard let cgImage = fixedImage.cgImage?.cropping(to: cropRect) else {
-            return nil
-        }
-
-        return UIImage(cgImage: cgImage)
-    }
-
-    
-    
-    
-    private func saveImageUrlToFirestore(url: String) {
-        guard let user = Auth.auth().currentUser else { return }
-        let userDoc = Firestore.firestore().collection("users").document(user.uid)
-        
-        userDoc.updateData([
-            "profileImageURLs": FieldValue.arrayUnion([url])
-        ]) { error in
-            if let error = error {
-                print("Error saving image URL to Firestore: \(error.localizedDescription)")
-            } else {
-                print("Successfully added image URL to Firestore: \(url)")
-            }
-        }
-    }
-    
     private func loadInitialData() {
         guard let user = Auth.auth().currentUser else { return }
-        
+
         Firestore.firestore().collection("users").document(user.uid).getDocument { document, error in
             if let error = error {
                 print("Error fetching initial data: \(error.localizedDescription)")
                 return
             }
-            
+
             if let document = document, document.exists {
                 let data = document.data() ?? [:]
                 religion = data["religion"] as? String ?? ""
@@ -659,33 +437,14 @@ struct EditProfileView: View {
                 gender = data["gender"] as? String ?? ""
                 relationshipGoal = data["relationshipGoal"] as? String ?? ""
                 selectedLanguages = data["languages"] as? [String] ?? []
-                
+
                 if let imageURLs = data["profileImageURLs"] as? [String] {
-                    loadExistingImages(from: imageURLs)
+                    photoManager.loadExisting(urls: imageURLs)
                 }
             }
         }
     }
-    
-    private func loadExistingImages(from imageURLs: [String]) {
-        // Fix #6: use SDWebImageManager which caches images on disk automatically.
-        // Re-opening the edit screen no longer re-downloads images from Cloudinary —
-        // subsequent loads are instant reads from the local cache.
-        for urlString in imageURLs {
-            guard let url = URL(string: urlString) else { continue }
-            SDWebImageManager.shared.loadImage(
-                with: url,
-                options: [.continueInBackground, .highPriority],
-                progress: nil
-            ) { image, _, _, _, _, _ in
-                guard let image = image else { return }
-                DispatchQueue.main.async {
-                    selectedImages.append(ProfileImage(image: image, isUploading: false))
-                }
-            }
-        }
-    }
-    
+
     private func saveProfileData() {
         guard let user = Auth.auth().currentUser else {
             print("❌ No authenticated user")
@@ -742,20 +501,8 @@ struct EditProfileView: View {
     }
     
 }
-extension UIImage {
-    func fixedOrientation() -> UIImage {
-        if imageOrientation == .up {
-            return self
-        }
-
-        UIGraphicsBeginImageContextWithOptions(size, false, scale)
-        draw(in: CGRect(origin: .zero, size: size))
-        let normalizedImage = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-
-        return normalizedImage ?? self
-    }
-}
+// fixedOrientation() now lives in PhotoUploadManager.swift (shared across
+// every photo upload screen) — removed the duplicate that was here.
 
 struct EnhancedTextFieldStyle: TextFieldStyle {
     func _body(configuration: TextField<Self._Label>) -> some View {
@@ -769,6 +516,3 @@ struct EnhancedTextFieldStyle: TextFieldStyle {
             )
     }
 }
-
-
-
