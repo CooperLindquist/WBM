@@ -19,7 +19,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         return true
     }
 
-    // Clear badge when app becomes active
     func applicationDidBecomeActive(_ application: UIApplication) {
         NotificationManager.shared.cancelEngagementReminder()
 
@@ -28,9 +27,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             Firestore.firestore().collection("users").document(uid)
                 .updateData(["lastActive": Timestamp(date: Date())])
         }
+
+        // Re-verify subscription status every time the app comes to foreground
+        // (catches renewals, cancellations, and billing-issue resolutions)
+        Task { await SubscriptionManager.shared.refresh() }
     }
 
-    // Schedule engagement reminder when app goes to background
     func applicationDidEnterBackground(_ application: UIApplication) {
         NotificationManager.shared.scheduleEngagementReminder()
     }
@@ -40,6 +42,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 struct WBMApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var sessionManager = SessionManager()
+    @StateObject private var subscriptionManager = SubscriptionManager.shared
 
     var body: some Scene {
         WindowGroup {
@@ -55,8 +58,15 @@ struct WBMApp: App {
                 }
             }
             .environmentObject(sessionManager)
+            .environmentObject(subscriptionManager)
             .animation(.default, value: sessionManager.isSignedIn)
             .animation(.default, value: sessionManager.isLoading)
+            .task {
+                // Refresh subscription on cold launch (after sign-in state settles)
+                if Auth.auth().currentUser != nil {
+                    await SubscriptionManager.shared.refresh()
+                }
+            }
         }
     }
 }

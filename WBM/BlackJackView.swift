@@ -139,7 +139,7 @@ struct BlackJackView: View {
         @Binding var handsPlayedToday: Int
         @Binding var hasFetchedHands: Bool
 
-        @State private var isPremium = false
+        @State private var subscriptionTier: SubscriptionTier = .none
         @State private var showPremiumAlert = false
 
         private let maxHands = 4 // standard casino cap on splits (3 splits -> 4 hands)
@@ -183,10 +183,10 @@ struct BlackJackView: View {
                     }
                     .padding(.horizontal)
 
-                    if !gameStarted && !isPremium {
+                    if !gameStarted && subscriptionTier.blackjackHandLimit != nil {
                         VStack {
                             if hasFetchedHands {
-                                if handsPlayedToday >= 3 {
+                                if handsPlayedToday >= (subscriptionTier.blackjackHandLimit ?? Int.max) {
                                     VStack {
                                         if timeRemaining > 0 {
                                             Text("Next game in: \(timeFormatted(timeRemaining))")
@@ -201,7 +201,7 @@ struct BlackJackView: View {
                                         }
                                     }
                                 } else {
-                                    Text("Games left: \(3 - handsPlayedToday)")
+                                    Text("Games left: \((subscriptionTier.blackjackHandLimit ?? 0) - handsPlayedToday)")
                                         .font(.title2)
                                         .foregroundColor(.green)
                                 }
@@ -330,7 +330,7 @@ struct BlackJackView: View {
                 .padding(.bottom, 30)
                 .onAppear {
                     checkPremiumStatus()
-                    if !isPremium {
+                    if subscriptionTier == .none {
                         loadTimerState()
                     }
                 }
@@ -386,7 +386,7 @@ struct BlackJackView: View {
                         fetchHandsPlayedToday()
                         canPlayHand { result in
                             canPlay = result
-                            if !result && !isPremium {
+                            if !result && subscriptionTier == .none {
                                 loadTimerState()
                             }
                         }
@@ -501,12 +501,25 @@ struct BlackJackView: View {
         // MARK: - Premium / daily limit plumbing (unchanged behavior)
 
         private func checkPremiumStatus() {
+            // Use the shared SubscriptionManager which already refreshed on launch/foreground.
+            // Fall back to a Firestore read if the manager hasn't loaded yet.
+            let managerTier = SubscriptionManager.shared.currentTier
+            if managerTier != .none {
+                subscriptionTier = managerTier
+                return
+            }
             guard let userId = Auth.auth().currentUser?.uid else { return }
             db.collection("users").document(userId).getDocument { snapshot, _ in
                 if let data = snapshot?.data() {
-                    let premiumStatus = data["premium"] as? Bool ?? false
+                    let tierString = data["subscriptionTier"] as? String ?? ""
+                    let legacyPremium = data["premium"] as? Bool ?? false
                     DispatchQueue.main.async {
-                        isPremium = premiumStatus
+                        switch tierString {
+                        case "silver":  self.subscriptionTier = .silver
+                        case "gold":    self.subscriptionTier = .gold
+                        case "diamond": self.subscriptionTier = .diamond
+                        default:        self.subscriptionTier = legacyPremium ? .silver : .none
+                        }
                     }
                 }
             }
@@ -519,17 +532,17 @@ struct BlackJackView: View {
             }
             db.collection("users").document(userId).getDocument { snapshot, error in
                 if let data = snapshot?.data() {
-                    let isPremium = data["premium"] as? Bool ?? false
                     let handsPlayedToday = data["handsPlayedToday"] as? Int ?? 0
-                    if isPremium {
+                    // nil limit = unlimited (Gold / Diamond)
+                    guard let limit = self.subscriptionTier.blackjackHandLimit else {
+                        completion(true)
+                        return
+                    }
+                    let lastPlayedDate = (data["lastPlayedDate"] as? Timestamp)?.dateValue() ?? Date()
+                    if !Calendar.current.isDate(lastPlayedDate, inSameDayAs: Date()) {
                         completion(true)
                     } else {
-                        let lastPlayedDate = (data["lastPlayedDate"] as? Timestamp)?.dateValue() ?? Date()
-                        if !Calendar.current.isDate(lastPlayedDate, inSameDayAs: Date()) {
-                            completion(true)
-                        } else {
-                            completion(handsPlayedToday < 3)
-                        }
+                        completion(handsPlayedToday < limit)
                     }
                 } else {
                     completion(false)
@@ -616,7 +629,7 @@ struct BlackJackView: View {
             let savedTimeRemaining = UserDefaults.standard.integer(forKey: "timeRemaining")
             let elapsedTime = Int(Date().timeIntervalSince(lastTimerUpdate))
             timeRemaining = max(0, savedTimeRemaining - elapsedTime)
-            if timeRemaining > 0 && handsPlayedToday >= 3 && !isPremium {
+            if timeRemaining > 0 && subscriptionTier.blackjackHandLimit != nil && handsPlayedToday >= (subscriptionTier.blackjackHandLimit ?? Int.max) {
                 startCountdown()
             }
         }

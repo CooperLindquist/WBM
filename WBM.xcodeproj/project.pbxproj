@@ -39,7 +39,8 @@
 		1ECA733F2FE76EA8007D2294 /* PhotoGridEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA733E2FE76EA8007D2294 /* PhotoGridEditor.swift */; };
 		1ECA73432FE77CF3007D2294 /* AutoSpotlight.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA73422FE77CF3007D2294 /* AutoSpotlight.swift */; };
 		1ECA73472FE9FA56007D2294 /* MatchProfileCover.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA73462FE9FA56007D2294 /* MatchProfileCover.swift */; };
-		1ECDA42F2F686C5C00804FAD /* WBMStoreKit.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 1ECDA42E2F686C5C00804FAD /* WBMStoreKit.storekit */; };
+		1ECA73492FEAFFFE007D2294 /* SubscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA73482FEAFFFE007D2294 /* SubscriptionManager.swift */; };
+		1ECA734F2FEC2327007D2294 /* WBMStoreKit.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 1ECA734E2FEC2327007D2294 /* WBMStoreKit.storekit */; };
 		DB12D4412D2E071900A4DA2B /* Utlities.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB12D4402D2E071900A4DA2B /* Utlities.swift */; };
 		DB1F77A52D3C8DAD00DD6378 /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB1F77A42D3C8DAD00DD6378 /* LocationManager.swift */; };
 		DB5554D42EF3A11000ABAB24 /* SwipeableUserCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB5554D32EF3A11000ABAB24 /* SwipeableUserCard.swift */; };
@@ -98,7 +99,8 @@
 		1ECA733E2FE76EA8007D2294 /* PhotoGridEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoGridEditor.swift; sourceTree = "<group>"; };
 		1ECA73422FE77CF3007D2294 /* AutoSpotlight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoSpotlight.swift; sourceTree = "<group>"; };
 		1ECA73462FE9FA56007D2294 /* MatchProfileCover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchProfileCover.swift; sourceTree = "<group>"; };
-		1ECDA42E2F686C5C00804FAD /* WBMStoreKit.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = WBMStoreKit.storekit; sourceTree = "<group>"; };
+		1ECA73482FEAFFFE007D2294 /* SubscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionManager.swift; sourceTree = "<group>"; };
+		1ECA734E2FEC2327007D2294 /* WBMStoreKit.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = WBMStoreKit.storekit; sourceTree = "<group>"; };
 		DB12D4402D2E071900A4DA2B /* Utlities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utlities.swift; sourceTree = "<group>"; };
 		DB1F77A42D3C8DAD00DD6378 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
 		DB5554D32EF3A11000ABAB24 /* SwipeableUserCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeableUserCard.swift; sourceTree = "<group>"; };
@@ -173,10 +175,10 @@
 				1ECA72E62FDB617B007D2294 /* RateUserView.swift */,
 				1ECA72D52FDA5192007D2294 /* TabBarView.swift */,
 				1ECA72CA2FDA50DA007D2294 /* NotificationManager.swift */,
-				1ECDA42E2F686C5C00804FAD /* WBMStoreKit.storekit */,
 				DB12D4402D2E071900A4DA2B /* Utlities.swift */,
 				DB1F77A42D3C8DAD00DD6378 /* LocationManager.swift */,
 				1ECA73342FE63914007D2294 /* ProfilePreviewTile.swift */,
+				1ECA734E2FEC2327007D2294 /* WBMStoreKit.storekit */,
 				1ECA733A2FE63D0C007D2294 /* Review.swift */,
 				1ECA730C2FDB6740007D2294 /* BlackJackView.swift */,
 				1ECA732E2FE5D684007D2294 /* UserCardView.swift */,
@@ -199,6 +201,7 @@
 				1ECA73142FDB6740007D2294 /* MessagesView.swift */,
 				1ECA73152FDB6740007D2294 /* OnboardingView.swift */,
 				1ECA73162FDB6740007D2294 /* PremiumPromptView.swift */,
+				1ECA73482FEAFFFE007D2294 /* SubscriptionManager.swift */,
 				1ECA73172FDB6740007D2294 /* ProfileView.swift */,
 				1ECA73182FDB6740007D2294 /* SpotlightView.swift */,
 				1ECA73192FDB6740007D2294 /* StarsView.swift */,
@@ -302,7 +305,7 @@
 			files = (
 				DBB4E97B2D28550D00C44E47 /* GoogleService-Info.plist in Resources */,
 				DBB4E95E2D28508500C44E47 /* Preview Assets.xcassets in Resources */,
-				1ECDA42F2F686C5C00804FAD /* WBMStoreKit.storekit in Resources */,
+				1ECA734F2FEC2327007D2294 /* WBMStoreKit.storekit in Resources */,
 				DBB4E95B2D28508500C44E47 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -352,6 +355,7 @@
 				1ECA72CE2FDA50DB007D2294 /* NotificationManager.swift in Sources */,
 				DBB4E9732D2851D900C44E47 /* User.swift in Sources */,
 				1ECA72DB2FDA53D9007D2294 /* WBMApp.swift in Sources */,
+				1ECA73492FEAFFFE007D2294 /* SubscriptionManager.swift in Sources */,
 				1ECA732F2FE5D684007D2294 /* UserCardView.swift in Sources */,
 				DBB4E98A2D285EDD00C44E47 /* SessionManager.swift in Sources */,
 				1ECA72DF2FDA5410007D2294 /* SwipeAlgorithm.swift in Sources */,
