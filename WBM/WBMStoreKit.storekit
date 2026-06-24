@@ -15,28 +15,13 @@
   ],
   "products" : [
     {
-      "displayPrice" : "1.99",
-      "familyShareable" : false,
-      "internalID" : "4F5965E7",
-      "localizations" : [
-        {
-          "description" : "",
-          "displayName" : "",
-          "locale" : "en_US"
-        }
-      ],
-      "productID" : "wbm_100_diamonds",
-      "referenceName" : "100 Diamonds",
-      "type" : "Consumable"
-    },
-    {
       "displayPrice" : "0.99",
       "familyShareable" : false,
       "internalID" : "C6651055",
       "localizations" : [
         {
-          "description" : "",
-          "displayName" : "",
+          "description" : "50 Diamonds",
+          "displayName" : "50 Diamonds",
           "locale" : "en_US"
         }
       ],
@@ -45,18 +30,33 @@
       "type" : "Consumable"
     },
     {
+      "displayPrice" : "1.99",
+      "familyShareable" : false,
+      "internalID" : "4F5965E7",
+      "localizations" : [
+        {
+          "description" : "100 Diamonds",
+          "displayName" : "100 Diamonds",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "wbm_100_diamonds",
+      "referenceName" : "100 Diamonds",
+      "type" : "Consumable"
+    },
+    {
       "displayPrice" : "2.99",
       "familyShareable" : false,
       "internalID" : "A9837B87",
       "localizations" : [
         {
-          "description" : "",
-          "displayName" : "",
+          "description" : "200 Diamonds",
+          "displayName" : "200 Diamonds",
           "locale" : "en_US"
         }
       ],
       "productID" : "wbm_200_diamonds",
-      "referenceName" : "200 Diamonds ",
+      "referenceName" : "200 Diamonds",
       "type" : "Consumable"
     },
     {
@@ -65,8 +65,8 @@
       "internalID" : "9C4FA030",
       "localizations" : [
         {
-          "description" : "",
-          "displayName" : "",
+          "description" : "500 Diamonds",
+          "displayName" : "500 Diamonds",
           "locale" : "en_US"
         }
       ],
@@ -91,76 +91,236 @@
   },
   "subscriptionGroups" : [
     {
-      "id" : "E70C1B26",
+      "id" : "SILVER_GROUP_001",
       "localizations" : [
-
+        {
+          "locale" : "en_US",
+          "displayName" : "WBM Silver"
+        }
       ],
-      "name" : "wbm_premium_monthly",
+      "name" : "WBM Silver",
       "subscriptions" : [
         {
-          "adHocOffers" : [
-
-          ],
-          "codeOffers" : [
-
-          ],
-          "displayPrice" : "6.99",
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "2.99",
           "familyShareable" : false,
           "groupNumber" : 1,
-          "internalID" : "E54C8AA7",
+          "internalID" : "SILVER_WEEKLY_001",
           "introductoryOffer" : null,
           "localizations" : [
             {
-              "description" : "",
-              "displayName" : "",
+              "description" : "Silver weekly subscription",
+              "displayName" : "WBM Silver – Weekly",
               "locale" : "en_US"
             }
           ],
-          "productID" : "wbm_premium_monthly",
-          "recurringSubscriptionPeriod" : "P1M",
-          "referenceName" : "Monthly",
-          "subscriptionGroupID" : "E70C1B26",
+          "productID" : "wbm_silver_weekly",
+          "recurringSubscriptionPeriod" : "P1W",
+          "referenceName" : "Silver Weekly",
+          "subscriptionGroupID" : "SILVER_GROUP_001",
           "type" : "RecurringSubscription",
-          "winbackOffers" : [
-
-          ]
+          "winbackOffers" : []
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "7.99",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "SILVER_MONTHLY_001",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Silver monthly subscription – save ~33%",
+              "displayName" : "WBM Silver – Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "wbm_silver_monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Silver Monthly",
+          "subscriptionGroupID" : "SILVER_GROUP_001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "59.99",
+          "familyShareable" : false,
+          "groupNumber" : 3,
+          "internalID" : "SILVER_YEARLY_001",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Silver yearly subscription – save ~62%",
+              "displayName" : "WBM Silver – Yearly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "wbm_silver_yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Silver Yearly",
+          "subscriptionGroupID" : "SILVER_GROUP_001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
         }
       ]
     },
     {
-      "id" : "109B4C03",
+      "id" : "GOLD_GROUP_001",
       "localizations" : [
-
+        {
+          "locale" : "en_US",
+          "displayName" : "WBM Gold"
+        }
       ],
-      "name" : "wbm_premium_yearly",
+      "name" : "WBM Gold",
       "subscriptions" : [
         {
-          "adHocOffers" : [
-
-          ],
-          "codeOffers" : [
-
-          ],
-          "displayPrice" : "24.99",
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "5.99",
           "familyShareable" : false,
           "groupNumber" : 1,
-          "internalID" : "5EAF43E3",
+          "internalID" : "GOLD_WEEKLY_001",
           "introductoryOffer" : null,
           "localizations" : [
             {
-              "description" : "",
-              "displayName" : "",
+              "description" : "Gold weekly subscription",
+              "displayName" : "WBM Gold – Weekly",
               "locale" : "en_US"
             }
           ],
-          "productID" : "wbm_premium_yearly",
-          "recurringSubscriptionPeriod" : "P1Y",
-          "referenceName" : "Yearly",
-          "subscriptionGroupID" : "109B4C03",
+          "productID" : "wbm_gold_weekly",
+          "recurringSubscriptionPeriod" : "P1W",
+          "referenceName" : "Gold Weekly",
+          "subscriptionGroupID" : "GOLD_GROUP_001",
           "type" : "RecurringSubscription",
-          "winbackOffers" : [
-
-          ]
+          "winbackOffers" : []
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "14.99",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "GOLD_MONTHLY_001",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Gold monthly subscription – save ~37%",
+              "displayName" : "WBM Gold – Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "wbm_gold_monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Gold Monthly",
+          "subscriptionGroupID" : "GOLD_GROUP_001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "109.99",
+          "familyShareable" : false,
+          "groupNumber" : 3,
+          "internalID" : "GOLD_YEARLY_001",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Gold yearly subscription – save ~65%",
+              "displayName" : "WBM Gold – Yearly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "wbm_gold_yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Gold Yearly",
+          "subscriptionGroupID" : "GOLD_GROUP_001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
+        }
+      ]
+    },
+    {
+      "id" : "DIAMOND_GROUP_001",
+      "localizations" : [
+        {
+          "locale" : "en_US",
+          "displayName" : "WBM Diamond"
+        }
+      ],
+      "name" : "WBM Diamond",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "9.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "DIAMOND_WEEKLY_001",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Diamond weekly subscription",
+              "displayName" : "WBM Diamond – Weekly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "wbm_diamond_weekly",
+          "recurringSubscriptionPeriod" : "P1W",
+          "referenceName" : "Diamond Weekly",
+          "subscriptionGroupID" : "DIAMOND_GROUP_001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "24.99",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "DIAMOND_MONTHLY_001",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Diamond monthly subscription – save ~37%",
+              "displayName" : "WBM Diamond – Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "wbm_diamond_monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Diamond Monthly",
+          "subscriptionGroupID" : "DIAMOND_GROUP_001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "179.99",
+          "familyShareable" : false,
+          "groupNumber" : 3,
+          "internalID" : "DIAMOND_YEARLY_001",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Diamond yearly subscription – save ~64%",
+              "displayName" : "WBM Diamond – Yearly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "wbm_diamond_yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Diamond Yearly",
+          "subscriptionGroupID" : "DIAMOND_GROUP_001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
         }
       ]
     }
