@@ -148,9 +148,40 @@ struct EditProfileView: View {
     @State private var selectedLanguages: [String] = []
     @State private var isShowingLanguageList = false
     @State private var age: String = ""
+    @State private var showErrorAlert = false
+    @State private var errorMessage = ""
 
     private let maxPhotos = 6
+    private let minPhotos = 3
     private let relationshipGoals = ["Short-term", "Long-term", "Friends", "Marriage"]
+
+    private var uploadedPhotoCount: Int {
+        photoManager.photos.filter { $0.remoteURL != nil }.count
+    }
+
+    private var missingFields: [String] {
+        var missing: [String] = []
+        if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { missing.append("Name") }
+        if bio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { missing.append("Bio") }
+        if age.filter({ $0.isNumber }).isEmpty { missing.append("Age") }
+        if gender.isEmpty { missing.append("Gender") }
+        if relationshipGoal.isEmpty { missing.append("Relationship Goal") }
+        if selectedLanguages.isEmpty { missing.append("Languages") }
+        if religion.isEmpty { missing.append("Religion") }
+        if ethnicity.isEmpty { missing.append("Ethnicity") }
+        if drinking.isEmpty { missing.append("Drinking") }
+        if smoking.isEmpty { missing.append("Smoking") }
+        if cannabis.isEmpty { missing.append("Cannabis") }
+        if politics.isEmpty { missing.append("Politics") }
+        if uploadedPhotoCount < minPhotos { missing.append("at least \(minPhotos) photos (\(uploadedPhotoCount)/\(minPhotos) uploaded)") }
+        return missing
+    }
+
+    // Only block saving on the very first profile setup. Once a user has a
+    // completed profile, ordinary edits shouldn't be blocked by this same gate.
+    private var isFormValid: Bool {
+        mode == .editing || missingFields.isEmpty
+    }
     
     var body: some View {
         NavigationStack {
@@ -173,6 +204,14 @@ struct EditProfileView: View {
                         LanguageSelectionSection
                         ProfilePicturesSection
 
+                        if !isFormValid {
+                            Text("Please complete: \(missingFields.joined(separator: ", "))")
+                                .font(.footnote)
+                                .foregroundColor(.white)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
+                        }
+
                         SaveButton
                     }
                     .padding(.horizontal)
@@ -185,6 +224,11 @@ struct EditProfileView: View {
         .sheet(isPresented: $isShowingLanguageList) {
             // Assuming LanguageList is defined elsewhere
             LanguageList(selectedLanguages: $selectedLanguages)
+        }
+        .alert("Incomplete Profile", isPresented: $showErrorAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(errorMessage)
         }
     }
     private var AgeSection: some View {
@@ -391,10 +435,10 @@ struct EditProfileView: View {
                 .foregroundColor(.white)
                 .padding()
                 .frame(maxWidth: .infinity)
-                .background(photoManager.isUploadingAny ? Color.gray : Color.blue)
+                .background(photoManager.isUploadingAny || !isFormValid ? Color.gray : Color.blue)
                 .cornerRadius(10)
         }
-        .disabled(photoManager.isUploadingAny)  // Disable if images are still uploading
+        .disabled(photoManager.isUploadingAny || !isFormValid)  // Disable if uploading or (on initial setup) form incomplete
     }
     
     
@@ -448,6 +492,12 @@ struct EditProfileView: View {
     private func saveProfileData() {
         guard let user = Auth.auth().currentUser else {
             print("❌ No authenticated user")
+            return
+        }
+
+        guard isFormValid else {
+            errorMessage = "Please complete the following before continuing: \(missingFields.joined(separator: ", "))."
+            showErrorAlert = true
             return
         }
 

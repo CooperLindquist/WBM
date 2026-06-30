@@ -23,7 +23,27 @@ struct OnboardingView: View {
     @State private var errorMessage = ""
 
     private let maxPhotos = 6
+    private let minPhotos = 3
     private let relationshipGoals = ["Short-term", "Long-term", "Friends", "Marriage"]
+
+    private var uploadedPhotoCount: Int {
+        photoManager.photos.filter { $0.remoteURL != nil }.count
+    }
+
+    private var missingFields: [String] {
+        var missing: [String] = []
+        if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { missing.append("Name") }
+        if bio.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { missing.append("Bio") }
+        if gender.isEmpty { missing.append("Gender") }
+        if relationshipGoal.isEmpty { missing.append("Relationship Goal") }
+        if selectedLanguages.isEmpty { missing.append("Languages") }
+        if uploadedPhotoCount < minPhotos { missing.append("at least \(minPhotos) photos (\(uploadedPhotoCount)/\(minPhotos) uploaded)") }
+        return missing
+    }
+
+    private var isFormValid: Bool {
+        missingFields.isEmpty
+    }
     
     var body: some View {
         ZStack {
@@ -57,6 +77,14 @@ struct OnboardingView: View {
                         RelationshipGoalSection
                         LanguageSelectionSection
                         ProfilePicturesSection
+                        
+                        if !isFormValid {
+                            Text("Please complete: \(missingFields.joined(separator: ", "))")
+                                .font(.footnote)
+                                .foregroundColor(.white)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
+                        }
                         
                         SaveButton
                     }
@@ -171,10 +199,10 @@ struct OnboardingView: View {
                 .foregroundColor(.white)
                 .padding()
                 .frame(maxWidth: .infinity)
-                .background(photoManager.isUploadingAny ? Color.gray : Color.blue)
+                .background(photoManager.isUploadingAny || !isFormValid ? Color.gray : Color.blue)
                 .cornerRadius(10)
         }
-        .disabled(photoManager.isUploadingAny) // Disable if images are still uploading
+        .disabled(photoManager.isUploadingAny || !isFormValid) // Disable if uploading or form incomplete
     }
     
     
@@ -221,6 +249,13 @@ struct OnboardingView: View {
 
     private func saveProfileData() {
         guard let user = Auth.auth().currentUser else { return }
+
+        guard isFormValid else {
+            errorMessage = "Please complete the following before continuing: \(missingFields.joined(separator: ", "))."
+            showErrorAlert = true
+            return
+        }
+
         let updatedData: [String: Any] = [
             "name": name,
             "bio": bio,
