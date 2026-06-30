@@ -41,10 +41,25 @@ struct AutoSpotlight {
     /// filled-out profiles qualify, while empty/abandoned ones don't.
     private static let minCompletenessScore: Double = 4
 
+    /// COST OPTIMIZATION: this does a global "is the shared Spotlight pool topped
+    /// up" check — the result doesn't depend on which user triggers it, so there's
+    /// no benefit to running it every single time ANY user opens the Spotlight tab
+    /// (previously: 2 collection-wide queries + up to 100-doc users query, on every
+    /// tab open, across the whole user base). A local per-device cooldown is enough:
+    /// the pool only needs topping up occasionally, not on every visit, and if one
+    /// device skips a check because it ran recently, some other device's check will
+    /// cover it within the cooldown window.
+    private static let cooldownInterval: TimeInterval = 15 * 60 // 15 minutes
+    private static let lastRunDefaultsKey = "AutoSpotlight.lastTopUpAttempt"
+
     /// Checks how many auto-boosted slots are currently active, and tops up
     /// to `maxAutoSlots` if there's room. Call this opportunistically (e.g.
     /// whenever SpotlightView loads) — same pattern as the expired-doc cleanup.
     static func topUpIfNeeded(excludingUserID currentUserID: String) {
+        let lastRun = UserDefaults.standard.object(forKey: lastRunDefaultsKey) as? Date ?? .distantPast
+        guard Date().timeIntervalSince(lastRun) > cooldownInterval else { return }
+        UserDefaults.standard.set(Date(), forKey: lastRunDefaultsKey)
+
         let spotlightRef = Firestore.firestore().collection("Spotlight")
         let now = Date()
 

@@ -103,22 +103,13 @@ struct MessagesView: View {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         let chatID = [uid, userID].sorted().joined(separator: "_")
 
-        // Get the latest message and add current user to its readBy array
-        Firestore.firestore()
-            .collection("chats")
-            .document(chatID)
-            .collection("messages")
-            .order(by: "timestamp", descending: true)
-            .limit(to: 1)
-            .getDocuments { snap, _ in
-                guard let doc = snap?.documents.first else { return }
-                doc.reference.updateData([
-                    "readBy": FieldValue.arrayUnion([uid])
-                ])
-                DispatchQueue.main.async {
-                    unreadChats.remove(userID)
-                }
-            }
+        // COST OPTIMIZATION: the chat doc now carries an `unreadBy` array directly,
+        // so marking as read is one write to a field we already have — no more
+        // querying the messages subcollection just to find the latest message.
+        Firestore.firestore().collection("chats").document(chatID).updateData([
+            "unreadBy": FieldValue.arrayRemove([uid])
+        ])
+        unreadChats.remove(userID)
     }
 
     // MARK: - Fetch
@@ -143,47 +134,83 @@ struct MessagesView: View {
                 return
             }
 
-            Firestore.firestore().collection("users")
-                .whereField(FieldPath.documentID(), in: matchIDs)
-                .getDocuments { snapshot, error in
-                    if let error = error {
-                        print("Error fetching matched users: \(error.localizedDescription)")
-                    } else if let documents = snapshot?.documents {
-                        matchedUsers = documents.compactMap { doc -> User? in
-                            return User(id: doc.documentID, data: doc.data())
+            // Firestore's `in` operator caps at 30 values, so chunk for users with
+            // a large number of matches rather than silently dropping the overflow.
+            let chunks = stride(from: 0, to: matchIDs.count, by: 30).map {
+                Array(matchIDs[$0..<min($0 + 30, matchIDs.count)])
+            }
+            let group = DispatchGroup()
+            var allUsers: [User] = []
+            let lock = NSLock()
+
+            for chunk in chunks {
+                group.enter()
+                Firestore.firestore().collection("users")
+                    .whereField(FieldPath.documentID(), in: chunk)
+                    .getDocuments { snapshot, error in
+                        if let error = error {
+                            print("Error fetching matched users: \(error.localizedDescription)")
+                        } else if let documents = snapshot?.documents {
+                            let users = documents.compactMap { doc -> User? in
+                                User(id: doc.documentID, data: doc.data())
+                            }
+                            lock.lock()
+                            allUsers.append(contentsOf: users)
+                            lock.unlock()
                         }
-                        fetchRecentMessages(for: matchIDs, currentUserID: currentUserID)
+                        group.leave()
                     }
-                    isLoading = false
-                }
+            }
+
+            group.notify(queue: .main) {
+                matchedUsers = allUsers
+                fetchRecentMessages(currentUserID: currentUserID)
+                isLoading = false
+            }
         }
     }
 
-    private func fetchRecentMessages(for matchIDs: [String], currentUserID: String) {
-        for matchID in matchIDs {
-            let chatID = [currentUserID, matchID].sorted().joined(separator: "_")
-            Firestore.firestore().collection("chats")
-                .document(chatID)
-                .collection("messages")
-                .order(by: "timestamp", descending: true)
-                .limit(to: 1)
-                .getDocuments { snapshot, _ in
-                    guard let doc = snapshot?.documents.first else { return }
+    /// COST OPTIMIZATION: previously this ran ONE query per match to fetch each
+    /// chat's most recent message (N reads for N matches, repeated every time this
+    /// screen opens). Now that `lastMessageText`/`lastMessageSenderID`/`unreadBy`
+    /// are denormalized onto the parent chat doc (written once at send-time in
+    /// ChatView), we can get the same information for every chat the user is in
+    /// with a single `whereField("participants", arrayContains:)` query.
+    private func fetchRecentMessages(currentUserID: String) {
+        Firestore.firestore().collection("chats")
+            .whereField("participants", arrayContains: currentUserID)
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    print("Error fetching chat summaries: \(error.localizedDescription)")
+                    return
+                }
+                guard let documents = snapshot?.documents else { return }
+
+                var newRecentMessages: [String: String] = [:]
+                var newUnreadChats: Set<String> = []
+
+                for doc in documents {
                     let data = doc.data()
-                    let text       = data["text"]     as? String   ?? ""
-                    let senderID   = data["senderID"] as? String   ?? ""
-                    let readBy     = data["readBy"]   as? [String] ?? []
+                    guard let participants = data["participants"] as? [String],
+                          let otherUserID = participants.first(where: { $0 != currentUserID }) else {
+                        continue
+                    }
 
-                    DispatchQueue.main.async {
-                        recentMessages[matchID] = text
+                    if let text = data["lastMessageText"] as? String {
+                        newRecentMessages[otherUserID] = text
+                    }
 
-                        // Mark as unread if the last message is from the other person and we haven't read it
-                        if senderID != currentUserID && !readBy.contains(currentUserID) {
-                            unreadChats.insert(matchID)
-                        }
+                    let unreadBy = data["unreadBy"] as? [String] ?? []
+                    if unreadBy.contains(currentUserID) {
+                        newUnreadChats.insert(otherUserID)
                     }
                 }
-        }
+
+                DispatchQueue.main.async {
+                    recentMessages = newRecentMessages
+                    unreadChats = newUnreadChats
+                }
+            }
     }
 }
 

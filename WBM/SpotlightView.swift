@@ -148,9 +148,28 @@ func fetchSpotlightedUsers(completion: @escaping ([String]) -> Void) {
         }
 }
 
+// COST OPTIMIZATION: SpotlightView is recreated from scratch every time the tab
+// bar switches to/from it (TabBarView's @ViewBuilder switch tears down the old
+// view), which re-triggers onAppear and re-runs ~7 reads every time — even for
+// a user just glancing at the tab and switching away again. This cache lives
+// outside the view struct (a plain class, not @State) so it survives those
+// re-creations; a short TTL means rapid tab-switching reuses the same data
+// instead of re-fetching, while still refreshing periodically so the feed
+// doesn't go stale for someone who leaves the tab open in the background.
+private final class SpotlightCache {
+    static let shared = SpotlightCache()
+    var users: [User] = []
+    var sources: [String: String] = [:]
+    var spotlightsRemaining: Int = 0
+    var lastFetched: Date = .distantPast
+    let ttl: TimeInterval = 60 // seconds
+
+    var isFresh: Bool { Date().timeIntervalSince(lastFetched) < ttl }
+}
+
 // SpotlightView UI
 struct SpotlightView: View {
-    @StateObject private var locationManager = LocationManager()
+    @ObservedObject private var locationManager = LocationManager.shared
     @State private var spotlightedUsers: [User] = []
     @State private var isLoading = true
     @State private var spotlightsRemaining: Int = 0
@@ -236,7 +255,7 @@ struct SpotlightView: View {
                 }
             }
         }
-        .onAppear(perform: loadSpotlightedUsersAndCount)
+        .onAppear { loadSpotlightedUsersAndCount() }
         .onDisappear { countdownTimer?.invalidate() }
         .fullScreenCover(item: $selectedUser) { user in
             ProfileFeedDetailCover(
@@ -265,15 +284,30 @@ struct SpotlightView: View {
                     self.ownSpotlightExpiresAt = expiresAt
                     self.startCountdown(to: expiresAt)
                 }
-                loadSpotlightedUsersAndCount() // still refresh the feed itself
+                loadSpotlightedUsersAndCount(forceRefresh: true) // still refresh the feed itself
             }
         }
     }
 
 
-    private func loadSpotlightedUsersAndCount() {
-        isLoading = true
+    private func loadSpotlightedUsersAndCount(forceRefresh: Bool = false) {
         guard let currentUserID = Auth.auth().currentUser?.uid else { return }
+
+        // COST OPTIMIZATION: reuse recently-fetched data instead of re-running the
+        // full read chain every time this view appears (see SpotlightCache comment
+        // above). `forceRefresh` is used right after the user actively changes
+        // something themselves (e.g. spending a Spotlight), where stale data would
+        // visibly contradict what they just did.
+        if !forceRefresh, SpotlightCache.shared.isFresh {
+            spotlightedUsers = SpotlightCache.shared.users
+            spotlightSources = SpotlightCache.shared.sources
+            spotlightsRemaining = SpotlightCache.shared.spotlightsRemaining
+            isLoading = false
+            refreshOwnSpotlightStatus(currentUserID: currentUserID)
+            return
+        }
+
+        isLoading = true
 
         // Fire-and-forget: tops up automatic Spotlight slots if any are
         // available. Runs in the background; doesn't block this load, and
@@ -281,7 +315,10 @@ struct SpotlightView: View {
         // (e.g. after using a manual Spotlight, or next time the tab opens).
         AutoSpotlight.topUpIfNeeded(excludingUserID: currentUserID)
         fetchSpotlightSources { sources in
-            DispatchQueue.main.async { self.spotlightSources = sources }
+            DispatchQueue.main.async {
+                self.spotlightSources = sources
+                SpotlightCache.shared.sources = sources
+            }
         }
 
         let currentUserRef = Firestore.firestore().collection("users").document(currentUserID)
@@ -314,6 +351,8 @@ struct SpotlightView: View {
                         DispatchQueue.main.async {
                             self.spotlightedUsers = []
                             self.isLoading = false
+                            SpotlightCache.shared.users = []
+                            SpotlightCache.shared.lastFetched = Date()
                         }
                         return
                     }
@@ -334,11 +373,14 @@ struct SpotlightView: View {
                         // Apply the same distance filter used on the home feed —
                         // a spotlighted user outside your distance range still
                         // shouldn't show up here.
-                        spotlightedUsers = candidates.filter { user in
+                        let filtered = candidates.filter { user in
                             self.filters.matches(user: user, currentLocation: currentLocation)
                         }
-
+                        spotlightedUsers = filtered
                         isLoading = false
+
+                        SpotlightCache.shared.users = filtered
+                        SpotlightCache.shared.lastFetched = Date()
                     }
                 }
             }
@@ -346,12 +388,20 @@ struct SpotlightView: View {
             if let count = data["spotlightsRemaining"] as? Int {
                 DispatchQueue.main.async {
                     self.spotlightsRemaining = count
+                    SpotlightCache.shared.spotlightsRemaining = count
                 }
             }
         }
 
-        // Separately check if the current user is themselves spotlighted right now,
-        // so we can show the "You're in the Spotlight" banner + countdown.
+        refreshOwnSpotlightStatus(currentUserID: currentUserID)
+    }
+
+    /// Separately checks if the current user is themselves spotlighted right now,
+    /// so we can show the "You're in the Spotlight" banner + countdown. This is a
+    /// single cheap doc read, kept outside the cache above so the countdown banner
+    /// always reflects the true current state (e.g. immediately after using a
+    /// Spotlight) rather than a minute-old cached snapshot.
+    private func refreshOwnSpotlightStatus(currentUserID: String) {
         Firestore.firestore().collection("Spotlight").document(currentUserID).getDocument { doc, _ in
             guard let expiresAt = (doc?.data()?["expiresAt"] as? Timestamp)?.dateValue(),
                   expiresAt > Date() else {

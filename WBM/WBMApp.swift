@@ -19,20 +19,29 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         return true
     }
 
+    // Clear badge when app becomes active
     func applicationDidBecomeActive(_ application: UIApplication) {
         NotificationManager.shared.cancelEngagementReminder()
 
-        // Update lastActive so this user scores higher in others' swipe feeds
+        // COST OPTIMIZATION: this used to write `lastActive` unconditionally on
+        // every single foreground (every app switch, every lock/unlock while the
+        // app stays running). HomePageView already throttles its own `lastActive`
+        // write to once every 5 minutes using this same UserDefaults key — reusing
+        // it here means the two writers share one cooldown instead of doubling the
+        // write rate, and a quick app-switch no longer costs a write at all.
         if let uid = Auth.auth().currentUser?.uid {
-            Firestore.firestore().collection("users").document(uid)
-                .updateData(["lastActive": Timestamp(date: Date())])
+            let lastActiveKey = "lastActiveWritten"
+            let now = Date()
+            let lastWrite = UserDefaults.standard.object(forKey: lastActiveKey) as? Date ?? .distantPast
+            if now.timeIntervalSince(lastWrite) > 300 {
+                Firestore.firestore().collection("users").document(uid)
+                    .updateData(["lastActive": Timestamp(date: now)])
+                UserDefaults.standard.set(now, forKey: lastActiveKey)
+            }
         }
-
-        // Re-verify subscription status every time the app comes to foreground
-        // (catches renewals, cancellations, and billing-issue resolutions)
-        Task { await SubscriptionManager.shared.refresh() }
     }
 
+    // Schedule engagement reminder when app goes to background
     func applicationDidEnterBackground(_ application: UIApplication) {
         NotificationManager.shared.scheduleEngagementReminder()
     }
@@ -42,7 +51,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 struct WBMApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var sessionManager = SessionManager()
-    @StateObject private var subscriptionManager = SubscriptionManager.shared
 
     var body: some Scene {
         WindowGroup {
@@ -58,15 +66,8 @@ struct WBMApp: App {
                 }
             }
             .environmentObject(sessionManager)
-            .environmentObject(subscriptionManager)
             .animation(.default, value: sessionManager.isSignedIn)
             .animation(.default, value: sessionManager.isLoading)
-            .task {
-                // Refresh subscription on cold launch (after sign-in state settles)
-                if Auth.auth().currentUser != nil {
-                    await SubscriptionManager.shared.refresh()
-                }
-            }
         }
     }
 }

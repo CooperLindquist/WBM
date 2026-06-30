@@ -115,6 +115,7 @@ struct BlackJackView: View {
 
     struct GameView: View {
         private let db: Firestore
+        @Environment(\.scenePhase) private var scenePhase
 
         // Multi-hand state (replaces playerHand / splitHands / isSplitActive)
         @State private var hands: [PlayerHand] = []
@@ -139,8 +140,19 @@ struct BlackJackView: View {
         @Binding var handsPlayedToday: Int
         @Binding var hasFetchedHands: Bool
 
-        @State private var subscriptionTier: SubscriptionTier = .none
+        @State private var isPremium = false
         @State private var showPremiumAlert = false
+
+        // COST OPTIMIZATION: diamonds are no longer written to Firestore on every
+        // hit/double/split/settle. Instead we accumulate the net change locally and
+        // flush it as a single FieldValue.increment() write at safe checkpoints
+        // (leaving the game, app backgrounding, or every few rounds as a safety net).
+        // Using `increment` rather than overwriting `diamonds` means this is safe even
+        // if something else (a diamond purchase, a reward ad) changes the balance on
+        // the server in between — we're applying a delta, not stomping an absolute value.
+        @State private var pendingDiamondDelta: Int = 0
+        @State private var roundsSinceLastFlush: Int = 0
+        private let flushEveryNRounds = 5
 
         private let maxHands = 4 // standard casino cap on splits (3 splits -> 4 hands)
 
@@ -183,10 +195,10 @@ struct BlackJackView: View {
                     }
                     .padding(.horizontal)
 
-                    if !gameStarted && subscriptionTier.blackjackHandLimit != nil {
+                    if !gameStarted && !isPremium {
                         VStack {
                             if hasFetchedHands {
-                                if handsPlayedToday >= (subscriptionTier.blackjackHandLimit ?? Int.max) {
+                                if handsPlayedToday >= 3 {
                                     VStack {
                                         if timeRemaining > 0 {
                                             Text("Next game in: \(timeFormatted(timeRemaining))")
@@ -201,7 +213,7 @@ struct BlackJackView: View {
                                         }
                                     }
                                 } else {
-                                    Text("Games left: \((subscriptionTier.blackjackHandLimit ?? 0) - handsPlayedToday)")
+                                    Text("Games left: \(3 - handsPlayedToday)")
                                         .font(.title2)
                                         .foregroundColor(.green)
                                 }
@@ -252,15 +264,7 @@ struct BlackJackView: View {
                                 .disabled(betAmount >= diamonds)
                             }
 
-                            Button(action: {
-                                canPlayHand { canPlay in
-                                    if canPlay {
-                                        startGame()
-                                    } else {
-                                        gameStatus = "Daily limit reached. Upgrade to premium!"
-                                    }
-                                }
-                            }) {
+                            Button(action: startGame) {
                                 Text("Start Game")
                                     .font(.title2)
                                     .fontWeight(.bold)
@@ -329,9 +333,10 @@ struct BlackJackView: View {
                 }
                 .padding(.bottom, 30)
                 .onAppear {
-                    checkPremiumStatus()
-                    if subscriptionTier == .none {
-                        loadTimerState()
+                    loadGameEligibility { _ in
+                        if !isPremium {
+                            loadTimerState()
+                        }
                     }
                 }
 
@@ -383,10 +388,9 @@ struct BlackJackView: View {
                     .shadow(radius: 10)
                     .transition(.scale)
                     .onAppear {
-                        fetchHandsPlayedToday()
-                        canPlayHand { result in
+                        loadGameEligibility { result in
                             canPlay = result
-                            if !result && subscriptionTier == .none {
+                            if !result && !isPremium {
                                 loadTimerState()
                             }
                         }
@@ -396,6 +400,23 @@ struct BlackJackView: View {
                         saveTimerState()
                     }
                 }
+            }
+            .onChange(of: isGameActive) { stillActive in
+                // Flush whenever the player exits the game (Exit button, either location).
+                if !stillActive {
+                    flushDiamondDelta()
+                }
+            }
+            .onChange(of: scenePhase) { newPhase in
+                // Flush if the app is backgrounded mid-game, so force-quitting
+                // doesn't lose more than the current in-progress hand.
+                if newPhase == .background || newPhase == .inactive {
+                    flushDiamondDelta()
+                }
+            }
+            .onDisappear {
+                // Backstop: covers any exit path that isn't already handled above.
+                flushDiamondDelta()
             }
         }
 
@@ -500,52 +521,50 @@ struct BlackJackView: View {
 
         // MARK: - Premium / daily limit plumbing (unchanged behavior)
 
-        private func checkPremiumStatus() {
-            // Use the shared SubscriptionManager which already refreshed on launch/foreground.
-            // Fall back to a Firestore read if the manager hasn't loaded yet.
-            let managerTier = SubscriptionManager.shared.currentTier
-            if managerTier != .none {
-                subscriptionTier = managerTier
-                return
-            }
-            guard let userId = Auth.auth().currentUser?.uid else { return }
-            db.collection("users").document(userId).getDocument { snapshot, _ in
-                if let data = snapshot?.data() {
-                    let tierString = data["subscriptionTier"] as? String ?? ""
-                    let legacyPremium = data["premium"] as? Bool ?? false
-                    DispatchQueue.main.async {
-                        switch tierString {
-                        case "silver":  self.subscriptionTier = .silver
-                        case "gold":    self.subscriptionTier = .gold
-                        case "diamond": self.subscriptionTier = .diamond
-                        default:        self.subscriptionTier = legacyPremium ? .silver : .none
-                        }
-                    }
-                }
-            }
-        }
-
-        private func canPlayHand(completion: @escaping (Bool) -> Void) {
+        /// Single source of truth for "what does the user doc currently say about
+        /// premium status / daily hand limit". Replaces three separate functions
+        /// (checkPremiumStatus, canPlayHand, fetchHandsPlayedToday) that were each
+        /// independently fetching the SAME user document — up to 3x reads for one
+        /// piece of information. Now there's exactly one read per call site.
+        /// Completion reports whether the player is currently eligible to start a hand.
+        private func loadGameEligibility(completion: ((Bool) -> Void)? = nil) {
             guard let userId = Auth.auth().currentUser?.uid else {
-                completion(false)
+                completion?(false)
                 return
             }
             db.collection("users").document(userId).getDocument { snapshot, error in
-                if let data = snapshot?.data() {
-                    let handsPlayedToday = data["handsPlayedToday"] as? Int ?? 0
-                    // nil limit = unlimited (Gold / Diamond)
-                    guard let limit = self.subscriptionTier.blackjackHandLimit else {
-                        completion(true)
-                        return
-                    }
-                    let lastPlayedDate = (data["lastPlayedDate"] as? Timestamp)?.dateValue() ?? Date()
-                    if !Calendar.current.isDate(lastPlayedDate, inSameDayAs: Date()) {
-                        completion(true)
-                    } else {
-                        completion(handsPlayedToday < limit)
+                guard let data = snapshot?.data() else {
+                    DispatchQueue.main.async { hasFetchedHands = true }
+                    completion?(false)
+                    return
+                }
+
+                let premiumStatus = data["premium"] as? Bool ?? false
+                let lastPlayedDate = (data["lastPlayedDate"] as? Timestamp)?.dateValue() ?? Date()
+                let currentHandsPlayed = data["handsPlayedToday"] as? Int ?? 0
+                let isNewDay = !Calendar.current.isDate(lastPlayedDate, inSameDayAs: Date())
+
+                if isNewDay {
+                    // Roll the daily counter over — same single write as before, just
+                    // no longer paired with a duplicate read to get here.
+                    db.collection("users").document(userId).updateData([
+                        "handsPlayedToday": 0,
+                        "lastPlayedDate": Timestamp(date: Date())
+                    ]) { writeError in
+                        DispatchQueue.main.async {
+                            isPremium = premiumStatus
+                            handsPlayedToday = (writeError == nil) ? 0 : currentHandsPlayed
+                            hasFetchedHands = true
+                            completion?(true) // new day always resets eligibility
+                        }
                     }
                 } else {
-                    completion(false)
+                    DispatchQueue.main.async {
+                        isPremium = premiumStatus
+                        handsPlayedToday = currentHandsPlayed
+                        hasFetchedHands = true
+                        completion?(premiumStatus || currentHandsPlayed < 3)
+                    }
                 }
             }
         }
@@ -590,31 +609,7 @@ struct BlackJackView: View {
                     saveTimerState()
                 } else {
                     timer?.invalidate()
-                    fetchHandsPlayedToday()
-                }
-            }
-        }
-
-        private func fetchHandsPlayedToday() {
-            guard let userId = Auth.auth().currentUser?.uid else { return }
-            db.collection("users").document(userId).getDocument { snapshot, error in
-                if let data = snapshot?.data() {
-                    let lastPlayedDate = (data["lastPlayedDate"] as? Timestamp)?.dateValue() ?? Date()
-                    let currentHandsPlayed = data["handsPlayedToday"] as? Int ?? 0
-                    if !Calendar.current.isDate(lastPlayedDate, inSameDayAs: Date()) {
-                        db.collection("users").document(userId).updateData([
-                            "handsPlayedToday": 0,
-                            "lastPlayedDate": Timestamp(date: Date())
-                        ]) { error in
-                            handsPlayedToday = (error == nil) ? 0 : currentHandsPlayed
-                            hasFetchedHands = true
-                        }
-                    } else {
-                        handsPlayedToday = currentHandsPlayed
-                        hasFetchedHands = true
-                    }
-                } else {
-                    hasFetchedHands = true
+                    loadGameEligibility()
                 }
             }
         }
@@ -629,7 +624,7 @@ struct BlackJackView: View {
             let savedTimeRemaining = UserDefaults.standard.integer(forKey: "timeRemaining")
             let elapsedTime = Int(Date().timeIntervalSince(lastTimerUpdate))
             timeRemaining = max(0, savedTimeRemaining - elapsedTime)
-            if timeRemaining > 0 && subscriptionTier.blackjackHandLimit != nil && handsPlayedToday >= (subscriptionTier.blackjackHandLimit ?? Int.max) {
+            if timeRemaining > 0 && handsPlayedToday >= 3 && !isPremium {
                 startCountdown()
             }
         }
@@ -637,7 +632,7 @@ struct BlackJackView: View {
         // MARK: - Core game flow
 
         private func startGame() {
-            canPlayHand { canPlay in
+            loadGameEligibility { canPlay in
                 guard canPlay else {
                     gameStatus = "Daily limit reached. Upgrade to premium!"
                     return
@@ -650,7 +645,7 @@ struct BlackJackView: View {
                 dealerRevealed = false
 
                 diamonds -= betAmount
-                updateDiamondsInFirebase()
+                trackDiamondChange(-betAmount)
 
                 let starterHand = PlayerHand(cards: [drawCard(), drawCard()], bet: betAmount)
                 hands = [starterHand]
@@ -756,7 +751,7 @@ struct BlackJackView: View {
             let bet = hands[currentHandIndex].bet
 
             diamonds -= bet
-            updateDiamondsInFirebase()
+            trackDiamondChange(-bet)
 
             hands[currentHandIndex].bet += bet
             hands[currentHandIndex].hasDoubled = true
@@ -775,7 +770,7 @@ struct BlackJackView: View {
             let isSplittingAces = cardRankValue(original.cards[0]) == 1
 
             diamonds -= original.bet
-            updateDiamondsInFirebase()
+            trackDiamondChange(-original.bet)
 
             var hand1 = PlayerHand(cards: [original.cards[0], drawCard()], bet: original.bet)
             var hand2 = PlayerHand(cards: [original.cards[1], drawCard()], bet: original.bet)
@@ -898,7 +893,16 @@ struct BlackJackView: View {
             }
 
             diamonds += totalPayout
-            updateDiamondsInFirebase()
+            trackDiamondChange(totalPayout)
+
+            // Safety net: even if the player never explicitly exits (e.g. they just
+            // keep playing for a long session), flush periodically so a crash or
+            // force-quit can't lose more than a few rounds' worth of diamonds.
+            roundsSinceLastFlush += 1
+            if roundsSinceLastFlush >= flushEveryNRounds {
+                roundsSinceLastFlush = 0
+                flushDiamondDelta()
+            }
 
             roundResults = results
             gameStatus = "Round Over"
@@ -929,11 +933,35 @@ struct BlackJackView: View {
             return total
         }
 
-        private func updateDiamondsInFirebase() {
+        /// Records a change to the player's diamond balance LOCALLY only.
+        /// `diamonds` (the @Binding, already updated by the caller before this runs)
+        /// stays the source of truth for the UI; `pendingDiamondDelta` is the net
+        /// amount we still owe Firestore. No network call happens here — see
+        /// `flushDiamondDelta()` for the actual write.
+        private func trackDiamondChange(_ delta: Int) {
+            pendingDiamondDelta += delta
+        }
+
+        /// The only function that actually writes diamonds to Firestore. Sends the
+        /// accumulated delta as a single FieldValue.increment(), then zeroes the
+        /// local counter. Safe to call even when the delta is 0 (no-ops).
+        /// Called at session boundaries (leaving the game / app backgrounding) and
+        /// as a periodic safety net every `flushEveryNRounds` rounds, rather than
+        /// after every single hit/double/split/settle.
+        private func flushDiamondDelta() {
+            guard pendingDiamondDelta != 0 else { return }
             guard let userId = Auth.auth().currentUser?.uid else { return }
-            db.collection("users").document(userId).updateData(["diamonds": diamonds]) { error in
+
+            let delta = pendingDiamondDelta
+            pendingDiamondDelta = 0 // clear immediately so we don't double-send if called again before this completes
+
+            db.collection("users").document(userId).updateData([
+                "diamonds": FieldValue.increment(Int64(delta))
+            ]) { error in
                 if let error = error {
-                    print("Error updating diamonds: \(error.localizedDescription)")
+                    print("Error flushing diamond delta: \(error.localizedDescription)")
+                    // Re-queue on failure so the change isn't silently lost.
+                    pendingDiamondDelta += delta
                 }
             }
         }

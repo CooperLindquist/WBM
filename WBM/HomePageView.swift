@@ -4,7 +4,7 @@ import SDWebImageSwiftUI
 import FirebaseAuth
 
 struct HomePageView: View {
-    @StateObject private var locationManager = LocationManager()
+    @ObservedObject private var locationManager = LocationManager.shared
     @State private var users: [User] = []
     @State private var currentIndex: Int = 0
     @State private var excludedUsers: Set<String> = []

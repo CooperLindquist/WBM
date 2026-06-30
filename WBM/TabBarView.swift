@@ -133,35 +133,26 @@ struct TabBarView: View {
         startUnreadMessagesListener(uid: uid)
     }
 
+    /// COST OPTIMIZATION: previously this fetched the user's match list, then ran
+    /// ONE query per match to check that chat's latest message (N reads, repeated
+    /// every time the tab bar appears / app launches). Now that chat docs carry a
+    /// denormalized `unreadBy` array (written once at send-time in ChatView), the
+    /// unread badge count comes from a single `whereField` query across all of the
+    /// user's chats — 1 read total instead of N+1.
     private func startUnreadMessagesListener(uid: String) {
-        Firestore.firestore().collection("users").document(uid).getDocument { snapshot, _ in
-            guard let matchIDs = snapshot?.data()?["matches"] as? [String], !matchIDs.isEmpty else { return }
-            var unread = 0
-            let group = DispatchGroup()
+        Firestore.firestore().collection("chats")
+            .whereField("participants", arrayContains: uid)
+            .getDocuments { snapshot, _ in
+                guard let documents = snapshot?.documents else { return }
 
-            for matchID in matchIDs {
-                let chatID = [uid, matchID].sorted().joined(separator: "_")
-                group.enter()
-                Firestore.firestore().collection("chats").document(chatID)
-                    .collection("messages")
-                    .order(by: "timestamp", descending: true)
-                    .limit(to: 1)
-                    .getDocuments { snap, _ in
-                        if let doc = snap?.documents.first,
-                           let senderID = doc.data()["senderID"] as? String,
-                           senderID != uid {
-                            let readBy = doc.data()["readBy"] as? [String] ?? []
-                            if !readBy.contains(uid) { unread += 1 }
-                        }
-                        group.leave()
-                    }
-            }
+                let unread = documents.reduce(into: 0) { count, doc in
+                    let unreadBy = doc.data()["unreadBy"] as? [String] ?? []
+                    if unreadBy.contains(uid) { count += 1 }
+                }
 
-            group.notify(queue: .main) {
                 if selectedTab != "bubble" { messagesCount = unread }
                 NotificationManager.shared.setBadge(count: likesCount + messagesCount)
             }
-        }
     }
 
     private func stopListeners() {

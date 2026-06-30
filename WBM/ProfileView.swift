@@ -421,8 +421,6 @@ struct ProfileView: View {
             // Safely unpack all data with defaults
             let data = document.data() ?? [:]
             userData = data
-            Firestore.firestore().collection("users").document(user.uid).getDocument { document, error in
-            }
             // Handle profile images with empty state
             profileImageURLs = data["profileImageURLs"] as? [String] ?? []
             
