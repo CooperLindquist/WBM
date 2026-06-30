@@ -41,6 +41,7 @@
 		1ECA73472FE9FA56007D2294 /* MatchProfileCover.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA73462FE9FA56007D2294 /* MatchProfileCover.swift */; };
 		1ECA73492FEAFFFE007D2294 /* SubscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA73482FEAFFFE007D2294 /* SubscriptionManager.swift */; };
 		1ECA734F2FEC2327007D2294 /* WBMStoreKit.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 1ECA734E2FEC2327007D2294 /* WBMStoreKit.storekit */; };
+		1ECA73512FF43C1B007D2294 /* AppleSignInHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ECA73502FF43C1B007D2294 /* AppleSignInHelper.swift */; };
 		DB12D4412D2E071900A4DA2B /* Utlities.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB12D4402D2E071900A4DA2B /* Utlities.swift */; };
 		DB1F77A52D3C8DAD00DD6378 /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB1F77A42D3C8DAD00DD6378 /* LocationManager.swift */; };
 		DB5554D42EF3A11000ABAB24 /* SwipeableUserCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB5554D32EF3A11000ABAB24 /* SwipeableUserCard.swift */; };
@@ -101,6 +102,8 @@
 		1ECA73462FE9FA56007D2294 /* MatchProfileCover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchProfileCover.swift; sourceTree = "<group>"; };
 		1ECA73482FEAFFFE007D2294 /* SubscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionManager.swift; sourceTree = "<group>"; };
 		1ECA734E2FEC2327007D2294 /* WBMStoreKit.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = WBMStoreKit.storekit; sourceTree = "<group>"; };
+		1ECA73502FF43C1B007D2294 /* AppleSignInHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignInHelper.swift; sourceTree = "<group>"; };
+		1ECA73522FF43CD2007D2294 /* WBM.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WBM.entitlements; sourceTree = "<group>"; };
 		DB12D4402D2E071900A4DA2B /* Utlities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utlities.swift; sourceTree = "<group>"; };
 		DB1F77A42D3C8DAD00DD6378 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
 		DB5554D32EF3A11000ABAB24 /* SwipeableUserCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeableUserCard.swift; sourceTree = "<group>"; };
@@ -166,6 +169,7 @@
 		DBB4E9552D28508300C44E47 /* WBM */ = {
 			isa = PBXGroup;
 			children = (
+				1ECA73522FF43CD2007D2294 /* WBM.entitlements */,
 				DBB4E97C2D28553000C44E47 /* Info.plist */,
 				1ECA72DA2FDA53D9007D2294 /* WBMApp.swift */,
 				DB5554D72EF3A15500ABAB24 /* FullscreenPhotoViewer.swift */,
@@ -184,6 +188,7 @@
 				1ECA732E2FE5D684007D2294 /* UserCardView.swift */,
 				1ECA73462FE9FA56007D2294 /* MatchProfileCover.swift */,
 				1ECA730D2FDB6740007D2294 /* ChatView.swift */,
+				1ECA73502FF43C1B007D2294 /* AppleSignInHelper.swift */,
 				1ECA733E2FE76EA8007D2294 /* PhotoGridEditor.swift */,
 				1ECA73362FE6391C007D2294 /* ProfileFeedDetailCover.swift */,
 				1ECA73382FE63CC9007D2294 /* WrittenReviewsSheet.swift */,
@@ -347,6 +352,7 @@
 				1ECA73292FDB6740007D2294 /* LikesView.swift in Sources */,
 				DB5554D62EF3A12C00ABAB24 /* PhotoManagerView.swift in Sources */,
 				1ECA73312FE5DB18007D2294 /* ProfileFeedCardView.swift in Sources */,
+				1ECA73512FF43C1B007D2294 /* AppleSignInHelper.swift in Sources */,
 				DB82876E2D28711100A3795D /* LanguageList.swift in Sources */,
 				DB12D4412D2E071900A4DA2B /* Utlities.swift in Sources */,
 				1ECA73472FE9FA56007D2294 /* MatchProfileCover.swift in Sources */,
@@ -489,6 +495,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = WBM/WBM.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"WBM/Preview Content\"";
@@ -519,6 +526,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = WBM/WBM.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"WBM/Preview Content\"";

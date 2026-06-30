@@ -2,10 +2,12 @@ import SwiftUI
 import Firebase
 import GoogleSignIn
 import FirebaseAuth
+import AuthenticationServices
 
 struct Start: View {
     @State private var navigationState: NavigationState = .none  // Navigation state
     @Environment(\.colorScheme) var colorScheme
+    private let appleSignInHelper = AppleSignInHelper()
 
     enum NavigationState {
         case none
@@ -67,6 +69,21 @@ struct Start: View {
                             .cornerRadius(12)
                             .shadow(radius: 5)
                         }
+                        .padding(.horizontal, 40)
+                        
+                        SignInWithAppleButton(.signIn, onRequest: { request in
+                            let nonce = appleSignInHelper.prepareRequest()
+                            request.requestedScopes = [.fullName, .email]
+                            request.nonce = nonce
+                        }, onCompletion: { result in
+                            appleSignInHelper.handleAuthorizationResult(result) { uid in
+                                checkOnboardingStatus(for: uid)
+                            }
+                        })
+                        .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+                        .frame(height: 50)
+                        .cornerRadius(12)
+                        .shadow(radius: 5)
                         .padding(.horizontal, 40)
                         
                         Spacer()

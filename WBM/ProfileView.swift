@@ -22,6 +22,10 @@ struct ProfileView: View {
     @State private var isLoading = true
     @State private var profileImageURLs: [String] = []
     @State private var selectedImageIndex = 0
+    @State private var showingDeleteAccountConfirm = false
+    @State private var showingDeleteAccountReauthAlert = false
+    @State private var isDeletingAccount = false
+    @State private var deleteAccountErrorMessage: String?
     @EnvironmentObject var sessionManager: SessionManager
     
     
@@ -204,6 +208,25 @@ struct ProfileView: View {
                                     .background(Color.red.opacity(0.1))
                                     .cornerRadius(12)
                                 }
+                                
+                                Button(action: { showingDeleteAccountConfirm = true }) {
+                                    HStack {
+                                        if isDeletingAccount {
+                                            ProgressView()
+                                                .tint(.white)
+                                        } else {
+                                            Text("Delete Account")
+                                                .fontWeight(.semibold)
+                                            Image(systemName: "trash.fill")
+                                        }
+                                    }
+                                    .foregroundColor(.white)
+                                    .padding()
+                                    .frame(maxWidth: .infinity)
+                                    .background(Color.red)
+                                    .cornerRadius(12)
+                                }
+                                .disabled(isDeletingAccount)
                             }
                             .padding(.top)
                         }
@@ -240,6 +263,29 @@ struct ProfileView: View {
             if profileImageURLs.isEmpty {
                 fetchProfileData()
             }
+        }
+        .alert("Delete Account", isPresented: $showingDeleteAccountConfirm) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                deleteAccount()
+            }
+        } message: {
+            Text("This will permanently delete your profile and all of your data. This action cannot be undone.")
+        }
+        .alert("Please Sign In Again", isPresented: $showingDeleteAccountReauthAlert) {
+            Button("OK", role: .cancel) {
+                sessionManager.signOut()
+            }
+        } message: {
+            Text("For your security, deleting your account requires a recent sign-in. Please sign out, sign back in, and try again.")
+        }
+        .alert("Couldn't Delete Account", isPresented: Binding(
+            get: { deleteAccountErrorMessage != nil },
+            set: { if !$0 { deleteAccountErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(deleteAccountErrorMessage ?? "Something went wrong. Please try again.")
         }
         .overlay(
             Button(action: { showingOnboarding = true }) {
@@ -434,6 +480,25 @@ struct ProfileView: View {
     
     private func signOut() {
         sessionManager.signOut()
+    }
+    
+    private func deleteAccount() {
+        isDeletingAccount = true
+        sessionManager.deleteAccount { error in
+            DispatchQueue.main.async {
+                isDeletingAccount = false
+                switch error {
+                case .none:
+                    break // sessionManager flips isSignedIn; WBMApp will route back to Start.
+                case .requiresRecentLogin:
+                    showingDeleteAccountReauthAlert = true
+                case .noUser:
+                    deleteAccountErrorMessage = "No signed-in user was found."
+                case .other(let underlyingError):
+                    deleteAccountErrorMessage = underlyingError.localizedDescription
+                }
+            }
+        }
     }
     
     private func profileDetailRow(icon: String, title: String, value: String) -> some View {
